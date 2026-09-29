@@ -6,6 +6,13 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.0.5 - 2026-09-29
+
+- New reel tracking. The old version worked from raw frame-to-frame speed readings, which are very noisy at low frame rates, and didn't account for its own input delay, so it overshot and swung around the fish. It now smooths the bar and fish positions using the input it knows it's sending, learns how fast the bar speeds up when held and when released, predicts where the bar will be once the next click takes effect, and brakes relative to the fish's own speed. In a simulation at 22 fps the fish stayed in the bar 78% of the time instead of 68%, and the worst case went from 38% to 64%.
+- The re-press check during reeling is off. It read memory offsets that may not match the game and could release and re-press the mouse at random.
+- Rod detection reads the game's HeldItemName instead of looking for a Roblox Tool, so the false "Wrong tool equipped (nothing)" message is gone.
+- The console logging no longer touches the executor's notify function.
+
 ## 1.0.4e - 2026-09-29
 
 - Lock fish is removed and every reel uses click tracking. Testing showed the game works out catch progress from its own values, not the on-screen positions: holding the bar on the fish lost 4 out of 4 reels at 1-3% progress, while tracking alone caught at 99%. Writing the positions only moved the picture and confused the tracking, which reads the bar and fish from the screen.
