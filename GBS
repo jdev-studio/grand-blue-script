@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.2";
+G.VERSION = "1.0.3";
 G.UPDATED = "2026-09-29";
-G.NOTE = "Shake aim: ignore laggy cursor readings";
+G.NOTE = "Shake aim: auto-calibrate UI size";
 pcall(function()
 	setrobloxinput(true);
 end);
@@ -144,14 +144,19 @@ function q.calibrate()
 				local o, G = pcall(memory_read, "float", x + t);
 				local Q, e = pcall(memory_read, "float", (x + t) + 4);
 				if o and (Q and (type(G) == "number" and (type(e) == "number" and (math.abs(G - B.X) < 1 and (e > B.Y - 120 and e <= B.Y))))) then
-					q.absSize, q.source = t, q.source .. " + measured";
+					q.absSize, q.source = t, (string.find(q.source, "measured", 1, true) and q.source or q.source .. " + measured");
 					return;
 				end;
 			end;
 		end;
 	end;
 end;
+pcall(q.calibrate);
 local function O(t)
+	if not q.checkedAt or tick() - q.checkedAt > 20 then
+		q.checkedAt = tick();
+		pcall(q.calibrate);
+	end;
 	local o, B = t.AbsolutePosition, t.AbsoluteSize;
 	if B and ((B.X >= .5 or B.Y >= .5)) then
 		return o, B;
@@ -223,6 +228,7 @@ local function i(t, o)
 	end;
 	return e;
 end;
+G.readRect = function(t) return (function(...) return ... end)(select(2, pcall(O, t))) end;
 local function V(t)
 	local o, B, G = pcall(O, t);
 	if not ((o and (B and G))) then
