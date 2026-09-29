@@ -1,0 +1,3432 @@
+local function t(t)
+	return game:GetService(t) or game[t];
+end;
+local o = t("Players");
+local B = t("RunService");
+do
+	local t = _G.GrandBlueFishMine;
+	_G.GrandBlueFishMine = nil;
+	if t and t.unload then
+		pcall(t.unload);
+	end;
+end;
+local G = { conns = {}, dead = false };
+_G.GrandBlueFishMine = G;
+pcall(function()
+	setrobloxinput(true);
+end);
+pcall(mouse1release);
+local x = {
+		castPct = 98,
+		castTimeoutMs = 2500,
+		recastAfterReelMs = 1550,
+		castRepressMs = 250,
+		idleTimeoutMs = 20000,
+		clickHoldMs = 45,
+		clickGapMs = 40,
+		settleMs = 25,
+		stableMs = 30,
+		maxAimFixes = 3,
+		reelInput = "Space",
+		freezeFish = true,
+		mineAutoSwing = true,
+		mineSwingDelayMs = 400,
+		mineStartTimeoutMs = 2500,
+		reelWatchdog = true,
+		reelRepressMs = 120,
+		reelLook = .15,
+		reelBrake = 1.0,
+		reelFishLead = .3,
+		farmAttackRange = 5,
+		farmRepressMs = 500,
+		farmMaxDistance = 600,
+		farmGiveUpMs = 6000,
+		espMaxDistance = 0,
+		espTextSize = 14,
+		fightMobs = true,
+		fightReturn = true,
+		fightRange = 80,
+	};
+local Q = 112;
+local e = 113;
+local v = 115;
+local function k()
+	return tick() * 1000;
+end;
+local function S(t, o)
+	if not t then
+		return nil;
+	end;
+	local B, G = pcall(t.FindFirstChild, t, o);
+	return B and G or nil;
+end;
+local function r()
+	return o and o.LocalPlayer;
+end;
+local function J(t)
+	return t.Parent;
+end;
+local q = {
+		absSize = 260,
+		pos = 1280,
+		size = 1312,
+		visible = 1437,
+		source = "built-in",
+	};
+local M = "https://imtheo.lol/Offsets/Offsets.json";
+local b = "grandblue_offsets.json";
+local function P()
+	local o;
+	pcall(function()
+		if isfile and isfile(b) then
+			local B = (t("HttpService")):JSONDecode(readfile(b));
+			if B and (B.at and os.time() - B.at < 86400) then
+				o = B.body;
+			end;
+		end;
+	end);
+	local B = false;
+	if not o then
+		local t, G = pcall(game.HttpGet, game, M);
+		if t and (type(G) == "string" and #G > 100) then
+			o, B = G, true;
+		end;
+	end;
+	if not o then
+		return;
+	end;
+	local G, x = pcall(function()
+			return ((t("HttpService")):JSONDecode(o)).Offsets;
+		end);
+	if not ((G and (x and x.GuiObject))) then
+		return;
+	end;
+	local Q = x.GuiObject;
+	local e = false;
+	for t, o in pairs({ Position = "pos", Size = "size", Visible = "visible" }) do
+		local B = Q[t];
+		if type(B) == "number" and (B >= 64 and B < 32768) then
+			q[o], e = B, true;
+		end;
+	end;
+	if e then
+		q.source = "offsets dump";
+	end;
+	if B then
+		pcall(function()
+			writefile(b, (t("HttpService")):JSONEncode({ at = os.time(), body = o }));
+		end);
+	end;
+end;
+pcall(P);
+function q.calibrate()
+	q.calibratedAt = tick();
+	local t = workspace.CurrentCamera;
+	local o, B = pcall(function()
+			return t.ViewportSize;
+		end);
+	if not ((o and (B and B.X > 1))) then
+		return;
+	end;
+	local G = S(r(), "PlayerGui");
+	local x, Q = pcall(function()
+			return G:GetChildren();
+		end);
+	for t, o in ipairs(x and Q or {}) do
+		local G, x = pcall(function()
+				return o.Address;
+			end);
+		if G and (type(x) == "number" and x > 0) then
+			for t = 128, 512, 4 do
+				local o, G = pcall(memory_read, "float", x + t);
+				local Q, e = pcall(memory_read, "float", (x + t) + 4);
+				if o and (Q and (type(G) == "number" and (type(e) == "number" and (math.abs(G - B.X) < 1 and (e > B.Y - 120 and e <= B.Y))))) then
+					q.absSize, q.source = t, q.source .. " + measured";
+					return;
+				end;
+			end;
+		end;
+	end;
+end;
+local function O(t)
+	local o, B = t.AbsolutePosition, t.AbsoluteSize;
+	if B and ((B.X >= .5 or B.Y >= .5)) then
+		return o, B;
+	end;
+	local G, x = pcall(function()
+			return t.Address;
+		end);
+	if not ((G and (type(x) == "number" and x > 0))) then
+		return o, B;
+	end;
+	local Q, e = pcall(memory_read, "float", x + q.absSize);
+	local v, k = pcall(memory_read, "float", (x + q.absSize) + 4);
+	local S = Q and (v and (type(e) == "number" and (type(k) == "number" and (e == e and (k == k and (e >= 0 and (k >= 0 and (e < 100000.0 and k < 100000.0))))))));
+	if S and ((e >= .5 or k >= .5)) then
+		return o, { X = e, Y = k };
+	end;
+	if not q.calibratedAt or tick() - q.calibratedAt > 1 then
+		pcall(q.calibrate);
+		local t, B = pcall(memory_read, "float", x + q.absSize);
+		local G, Q = pcall(memory_read, "float", (x + q.absSize) + 4);
+		if t and (G and (type(B) == "number" and (type(Q) == "number" and (B == B and (Q == Q and ((B >= .5 or Q >= .5))))))) then
+			return o, { X = B, Y = Q };
+		end;
+	end;
+	return o, B;
+end;
+local Z = {};
+local function R(t, o, B)
+	local G = Z[t];
+	local x = tick();
+	if G then
+		if G.inst then
+			if not B or x - G.t < B then
+				local t, o = pcall(J, G.inst);
+				if t and o ~= nil then
+					return G.inst;
+				end;
+			end;
+		elseif x - G.t < .02 then
+			return nil;
+		end;
+	end;
+	local Q = o();
+	if G then
+		G.inst, G.t = Q, x;
+	else
+		Z[t] = { inst = Q, t = x };
+	end;
+	return Q;
+end;
+local j = .025;
+local h = {};
+local function i(t, o)
+	local B = tick();
+	local G = h[t];
+	if G and B - G.t < ((o or j)) then
+		return G.v;
+	end;
+	local x = r();
+	if not x then
+		return nil;
+	end;
+	local Q, e = pcall(x.GetAttribute, x, t);
+	e = Q and e or nil;
+	if G then
+		G.t, G.v = B, e;
+	else
+		h[t] = { t = B, v = e };
+	end;
+	return e;
+end;
+local function V(t)
+	local o, B, G = pcall(O, t);
+	if not ((o and (B and G))) then
+		return nil;
+	end;
+	return B.X, B.Y, G.X, G.Y;
+end;
+local function l()
+	return R("myRoot", function()
+		local t = r();
+		return S(t and t.Character, "HumanoidRootPart");
+	end, 1);
+end;
+local function f()
+	if type(isrbxactive) ~= "function" then
+		return true;
+	end;
+	local t, o = pcall(isrbxactive);
+	return (not t) or (o ~= false);
+end;
+local g = { mouseHeld = false, spaceHeld = false, mouse = nil };
+function g.press()
+	if not g.mouseHeld then
+		pcall(mouse1press);
+		g.mouseHeld = true;
+	end;
+end;
+function g.release()
+	if g.mouseHeld then
+		pcall(mouse1release);
+		g.mouseHeld = false;
+	end;
+end;
+function g.spaceDown()
+	if not g.spaceHeld then
+		pcall(keypress, 32);
+		g.spaceHeld = true;
+	end;
+end;
+function g.spaceUp()
+	if g.spaceHeld then
+		pcall(keyrelease, 32);
+		g.spaceHeld = false;
+	end;
+end;
+function g.releaseAll()
+	g.release();
+	g.spaceUp();
+end;
+function g.moveTo(t, o)
+	pcall(mousemoveabs, math.floor(t + .5), math.floor(o + .5));
+end;
+function g.readMouse()
+	local t = g.mouse;
+	if not t then
+		local o = r();
+		local B, G = pcall(function()
+				return o:GetMouse();
+			end);
+		if not ((B and G)) then
+			return nil;
+		end;
+		g.mouse, t = G, G;
+	end;
+	local o, B, G = pcall(function()
+			return t.X, t.Y;
+		end);
+	if not ((o and (B and G))) then
+		g.mouse = nil;
+		return nil;
+	end;
+	return B, G;
+end;
+local K = {
+		running = false,
+		phase = "IDLE",
+		phaseAt = 0,
+		lastEvent = "",
+		status = "idle",
+		caught = 0,
+		lost = 0,
+		shakes = 0,
+		casts = 0,
+		misses = 0,
+		represses = 0,
+		castPressAt = 0,
+		castRepresses = 0,
+		reelProgressSeen = false,
+		reelEnded = false,
+		lastProgress = 0,
+		recastAt = 0,
+		castFill = 0,
+		castFillAt = 0,
+		castRate = 0,
+	};
+local function E(t)
+	if K.phase ~= t then
+		K.phase = t;
+		K.phaseAt = k();
+	end;
+end;
+local X = {};
+local y = {};
+function X.readBar(t)
+	local o = R("bar:" .. t, function()
+			local o = r();
+			local B = S(o and o.Character, "HumanoidRootPart");
+			return S(S(B, t), "Frame");
+		end);
+	if not o then
+		return nil;
+	end;
+	local B = R("amount:" .. t, function()
+			return S(o, "Amount");
+		end);
+	if not B then
+		return nil;
+	end;
+	local G, x, Q, e = V(o);
+	local v, k, J, q = V(B);
+	if not ((x and q)) or e <= 1 then
+		return nil;
+	end;
+	local M = y[t];
+	if not M or not rawequal(M.frame, o) or tick() - M.t > .25 then
+		local B = {};
+		local G, x = pcall(o.GetChildren, o);
+		for t, o in ipairs(G and x or {}) do
+			local G = o.Name;
+			if G == "Top" or string.sub(G, 1, 13) == "Critical Zone" then
+				B[#B + 1] = o;
+			end;
+		end;
+		M = { frame = o, list = B, t = tick() };
+		y[t] = M;
+	end;
+	local b = {};
+	for t, o in ipairs(M.list) do
+		do
+			local t, B, G, Q = V(o);
+			if B and (Q and Q > 0) then
+				local t = ((B - x)) / e;
+				b[#b + 1] = { lo = 1 - ((t + Q / e)), hi = 1 - t };
+			end;
+		end;
+	end;
+	return math.max(0, math.min(1, q / e)), b;
+end;
+function X.new()
+	return {
+		dHist = {},
+		D = nil,
+		step = nil,
+		stepIn = nil,
+		period = nil,
+	};
+end;
+function X.reset(t)
+	t.fill, t.at, t.dir, t.frames, t.sentFrames, t.sentAt = nil, 0, 0, 0, nil, nil;
+end;
+function X.inZone(t, o)
+	for o, B in ipairs(o) do
+		if t >= B.lo and t <= B.hi then
+			return true;
+		end;
+	end;
+	return false;
+end;
+function X.error(t, o)
+	local B, G = math.huge, 0;
+	for o, x in ipairs(o) do
+		local Q = math.abs(t - ((x.lo + x.hi)) / 2);
+		if Q < B then
+			B, G = Q, ((x.hi - x.lo)) / 2;
+		end;
+	end;
+	return B, G;
+end;
+function X.observe(t, o, B, G)
+	if t.fill == nil then
+		t.fill, t.at = o, B;
+		return false;
+	end;
+	local x = o - t.fill;
+	if math.abs(x) < 1e-05 then
+		return false;
+	end;
+	local Q = B - t.at;
+	local e = 1;
+	if t.period and Q > t.period * 1.5 then
+		e = math.floor(Q / t.period + .5);
+	end;
+	if e == 1 and (Q > 0 and Q < 100) then
+		t.period = t.period and (t.period * .8 + Q * .2) or Q;
+	end;
+	local v = o >= .999 or o <= .001 or (t.dir ~= 0 and x * t.dir < 0);
+	if not v then
+		local o = math.abs(x) / e;
+		if X.inZone(t.fill, G) then
+			t.stepIn = t.stepIn and (t.stepIn * .7 + o * .3) or o;
+		else
+			t.step = t.step and (t.step * .7 + o * .3) or o;
+		end;
+	end;
+	t.dir = x > 0 and 1 or -1;
+	t.fill, t.at = o, B;
+	t.frames = t.frames + e;
+	return true;
+end;
+function X.predict(t, o, B)
+	local G = t.step or t.stepIn;
+	if not ((t.fill and G)) or t.dir == 0 then
+		return nil;
+	end;
+	local x, Q = t.fill, t.dir;
+	for o = 1, o, 1 do
+		local e = (X.inZone(x, B) and t.stepIn) or G;
+		x = x + Q * e;
+		if x >= 1 then
+			x, Q = 1, -1;
+		elseif x <= 0 then
+			x, Q = 0, 1;
+		end;
+	end;
+	return x;
+end;
+function X.delay(t)
+	return t.D or 2;
+end;
+function X.shouldSend(t, o)
+	if #o == 0 then
+		return false;
+	end;
+	local B = X.delay(t);
+	local G, x = X.predict(t, B, o), X.predict(t, B + 1, o);
+	if not ((G and x)) then
+		return false;
+	end;
+	local Q, e = X.error(G, o);
+	local v = X.error(x, o);
+	local k = t.stepIn or t.step or 0;
+	return Q <= math.max(e, k / 2) and Q <= v;
+end;
+function X.sent(t, o)
+	t.sentFrames, t.sentAt = t.frames, o;
+end;
+function X.gone(t, o)
+	if not t.sentFrames then
+		return;
+	end;
+	local B = 1;
+	if t.period and t.period > 0 then
+		B = math.max(1, math.floor(((o - t.at)) / t.period + .5));
+	end;
+	local G = ((t.frames - t.sentFrames)) + B;
+	if o - t.sentAt < 500 and (G >= 1 and G <= 12) then
+		table.insert(t.dHist, G);
+		if #t.dHist > 9 then
+			table.remove(t.dHist, 1);
+		end;
+		local o, B, x = {}, nil, 0;
+		for t, G in ipairs(t.dHist) do
+			o[G] = ((o[G] or 0)) + 1;
+			if o[G] >= x then
+				B, x = G, o[G];
+			end;
+		end;
+		t.D = B;
+	end;
+	t.sentFrames, t.sentAt = nil, nil;
+end;
+local c = { timer = X.new() };
+function c.readFill()
+	return X.readBar("Fishing Bar");
+end;
+function c.watch(t)
+	local o = c.timer;
+	if o.sentAt and not c.readFill() then
+		X.gone(o, t);
+	end;
+	if o.sentAt and t - o.sentAt > 500 then
+		o.sentFrames, o.sentAt = nil, nil;
+	end;
+end;
+function c.step(t, o)
+	if K.phase == "IDLE" then
+		if o ~= "" then
+			return;
+		end;
+		if t < K.recastAt then
+			K.status = string.format("recast in %dms", K.recastAt - t);
+			return;
+		end;
+		g.press();
+		K.casts = K.casts + 1;
+		K.castPressAt = t;
+		K.castFill, K.castFillAt, K.castRate = 0, t, 0;
+		X.reset(c.timer);
+		E("CHARGE");
+		K.status = "charging cast";
+		return;
+	end;
+	local B, G = nil, nil;
+	if o == "Timed Release" then
+		B, G = c.readFill();
+	end;
+	if not B then
+		if t - K.phaseAt > x.castTimeoutMs then
+			g.release();
+			K.status = "no cast bar (rod equipped?)";
+			K.recastAt = t + 800;
+			E("IDLE");
+		elseif o == "" then
+			if g.mouseHeld and t - K.castPressAt >= x.castRepressMs then
+				g.release();
+				K.castPressAt = t;
+			elseif not g.mouseHeld and t - K.castPressAt >= 50 then
+				g.press();
+				K.castPressAt = t;
+				K.castRepresses = K.castRepresses + 1;
+			end;
+		end;
+		return;
+	end;
+	if not g.mouseHeld then
+		g.press();
+	end;
+	local Q = c.timer;
+	K.status = string.format("charging %d%%", math.floor(B * 100));
+	local e = math.max(.01, math.min(1, x.castPct / 100));
+	local v = { { lo = math.max(0, e - .005), hi = math.min(1, e + .005) } };
+	local k = false;
+	if X.observe(Q, B, t, v) and X.shouldSend(Q, v) then
+		k = true;
+	end;
+	if B >= math.min(1, e + .02) then
+		k = true;
+	end;
+	if k then
+		g.release();
+		X.sent(Q, t);
+		K.lastCastAim = X.predict(Q, X.delay(Q), v) or B;
+		K.status = string.format("cast at %d%% (aimed %.1f%%)", math.floor(B * 100), ((K.lastCastAim or 0)) * 100);
+		E("WAIT");
+	end;
+end;
+local T = {
+		stage = "SEEK",
+		actAt = 0,
+		calX = 0,
+		calY = 0,
+		fixes = 0,
+		target = nil,
+		last = nil,
+		sizes = {},
+	};
+T.SCAN_MS = 12;
+function T.findButton(t)
+	if T.scanAt and t - T.scanAt < T.SCAN_MS then
+		return T.scanBtn, T.scanAgain;
+	end;
+	T.scanAt = t;
+	T.scanBtn, T.scanAgain = T.scan(t);
+	return T.scanBtn, T.scanAgain;
+end;
+function T.scan(t)
+	local o = R("qteGui", function()
+			return S(S(r(), "PlayerGui"), "QuickTimeEvents");
+		end);
+	if not o then
+		return nil;
+	end;
+	local B, G = pcall(o.GetChildren, o);
+	if not B then
+		return nil;
+	end;
+	local Q, e, v = nil, nil, {};
+	local k, J = T.liveW, T.last;
+	for o, B in ipairs(G) do
+		if B.Name == "Button" then
+			local o, G, S, r = V(B);
+			if o and (S > 4 and r > 4) then
+				local B, q = o + S / 2, G + r / 2;
+				local M = math.floor(B) .. (":" .. math.floor(q));
+				v[M] = true;
+				local b = T.sizes[M];
+				if not b or math.abs(b.w - S) >= .5 then
+					b = { w = S, since = t };
+					T.sizes[M] = b;
+				end;
+				local P = t - b.since >= x.stableMs;
+				local O = not k or (S > k * .7 and S < k * 1.3);
+				if P and O then
+					local t = {
+							x = o,
+							y = G,
+							w = S,
+							h = r,
+							cx = B,
+							cy = q,
+						};
+					if J and (math.abs(J.cx - B) < 8 and math.abs(J.cy - q) < 8) then
+						e = t;
+					else
+						Q = t;
+					end;
+				end;
+			end;
+		end;
+	end;
+	for t in pairs(T.sizes) do
+		if not v[t] then
+			T.sizes[t] = nil;
+		end;
+	end;
+	if Q then
+		return Q, false;
+	end;
+	return e, e ~= nil;
+end;
+function T.reset()
+	T.stage, T.target, T.fixes, T.last = "SEEK", nil, 0, nil;
+	T.scanAt = nil;
+	g.release();
+end;
+function T.step(t)
+	if T.stage == "HOLD" then
+		if t >= T.actAt then
+			g.release();
+			T.last = T.target;
+			T.scanAt = nil;
+			K.shakes = K.shakes + 1;
+			T.stage, T.actAt = "GAP", t + x.clickGapMs;
+		end;
+		return;
+	end;
+	if T.stage == "GAP" then
+		if t >= T.actAt then
+			T.stage = "SEEK";
+		end;
+		return;
+	end;
+	local o, B = T.findButton(t);
+	if not o then
+		T.stage = "SEEK";
+		K.status = "shake: waiting for button";
+		return;
+	end;
+	local G = not T.target or math.abs(T.target.cx - o.cx) > 2 or math.abs(T.target.cy - o.cy) > 2;
+	if T.stage == "SEEK" or G then
+		if B and T.stage == "SEEK" then
+			K.misses = K.misses + 1;
+		end;
+		T.target, T.fixes = o, 0;
+		local G = math.min(12, o.w / 5);
+		g.moveTo((o.cx + T.calX) + G, (o.cy + T.calY) + G);
+		T.stage, T.actAt = "APPROACH", t + x.settleMs;
+		K.status = string.format("shake: aim %d,%d", o.cx, o.cy);
+		return;
+	end;
+	if T.stage == "APPROACH" then
+		if t < T.actAt then
+			return;
+		end;
+		g.moveTo(o.cx + T.calX, o.cy + T.calY);
+		T.stage, T.actAt = "AIM", t + x.settleMs;
+		return;
+	end;
+	if t < T.actAt then
+		return;
+	end;
+	local Q, e = g.readMouse();
+	local v = Q and (math.abs(Q - o.cx) <= 6 and math.abs(e - o.cy) <= 6);
+	if Q and (not v and T.fixes < x.maxAimFixes) then
+		T.calX = T.calX + ((o.cx - Q));
+		T.calY = T.calY + ((o.cy - e));
+		T.fixes = T.fixes + 1;
+		g.moveTo(o.cx + T.calX, o.cy + T.calY);
+		T.actAt = t + x.settleMs;
+		return;
+	end;
+	T.liveW = o.w;
+	g.press();
+	T.stage, T.actAt = "HOLD", t + x.clickHoldMs;
+	K.status = string.format("shake: click #%d", K.shakes + 1);
+end;
+local a = {};
+function a.reset()
+	a.t, a.bc, a.fc = nil, 0, 0;
+	a.vb, a.vf, a.vbRaw, a.acc = 0, 0, 0, 1.5;
+	a.hold = false;
+	a.missSince, a.repressAt = nil, nil;
+	a.pinValid, a.pinFails = nil, 0;
+	a.geo = nil;
+	a.safeAt, a.hovering = nil, false;
+end;
+a.reset();
+local N = 2.0;
+local U = 400;
+function a.perfectTime(t, o)
+	if t <= 0 then
+		return nil;
+	end;
+	local B, G = 0, o;
+	while G < 100 and B < 600 do
+		B = B + .033333333333333;
+		G = G + t / 30;
+	end;
+	return B;
+end;
+function a.tooEarly(t, o)
+	if a.safeAt == nil then
+		local o = S(S(S(S(r(), "PlayerGui"), "Fishing"), "Progress Bar"), "Gain");
+		local B, G = pcall(function()
+				return o.Text;
+			end);
+		local x = B and tonumber(string.match(tostring(G), "([%d%.]+)%%")) or nil;
+		local Q = x and a.perfectTime(x, math.min(t, .3) * 100);
+		a.safeAt = K.phaseAt + ((Q and (Q * 1000) * N + U or 20000));
+	end;
+	return o < a.safeAt;
+end;
+function a.holdBack(t, o)
+	if type(t) ~= "number" or not a.tooEarly(t, o) then
+		a.hovering = false;
+		return false;
+	end;
+	if t >= .92 then
+		a.hovering = true;
+	elseif t <= .86 then
+		a.hovering = false;
+	end;
+	return a.hovering;
+end;
+local n = q.visible;
+local Y = q.pos;
+local W = q.size;
+function a.pinFish(t, o, B, G, x, Q, e, v, k)
+	if a.pinValid == false then
+		return false;
+	end;
+	if type(memory_read) ~= "function" or type(memory_write) ~= "function" then
+		a.pinValid = false;
+		return false;
+	end;
+	if G - Q < 1 or G - v < 1 then
+		return false;
+	end;
+	local S, r = pcall(function()
+			local S, r = t.Address, o.Address;
+			local J = memory_read("float", r + Y);
+			local q = memory_read("float", r + W);
+			if a.pinValid == nil then
+				local t = memory_read("float", S + Y);
+				local o = math.abs(t - ((x - B)) / ((G - Q))) < .03 and (math.abs(J - ((e - B)) / ((G - v))) < .03 and math.abs(q - v / G) < .02);
+				if not o then
+					a.pinFails = ((a.pinFails or 0)) + 1;
+					if a.pinFails >= 15 then
+						a.pinValid = false;
+					end;
+					return false;
+				end;
+				a.pinValid = true;
+			end;
+			local M = Q / G;
+			local b = (((J * ((1 - q)) + q / 2) - M / 2)) / ((1 - M));
+			if k then
+				b = J * ((1 - q)) + q / 2 < .5 and 1 or 0;
+			end;
+			memory_write("float", S + Y, math.max(0, math.min(1, b)));
+			return true;
+		end);
+	return S and r == true;
+end;
+function a.gameHeld(t)
+	if type(memory_read) ~= "function" then
+		return nil;
+	end;
+	local o = R("reelRight", function()
+			return S(t, "Right Arrow");
+		end);
+	local B = R("reelLeft", function()
+			return S(t, "Left Arrow");
+		end);
+	if not ((o and B)) then
+		return nil;
+	end;
+	local G, x, Q = pcall(function()
+			return memory_read("byte", o.Address + n), memory_read("byte", B.Address + n);
+		end);
+	if not G or not (((x == 0 and Q == 1) or (x == 1 and Q == 0))) then
+		return nil;
+	end;
+	return x == 1;
+end;
+function a.setHold(t)
+	if x.reelInput == "Space" then
+		g.release();
+		if t then
+			g.spaceDown();
+		else
+			g.spaceUp();
+		end;
+	else
+		g.spaceUp();
+		if t then
+			g.press();
+		else
+			g.release();
+		end;
+	end;
+	a.hold = t;
+end;
+function a.frozen(t)
+	if a.hold or g.mouseHeld or g.spaceHeld then
+		a.setHold(false);
+	end;
+	a.repressAt, a.missSince, a.t = nil, nil, nil;
+	local o = i("ReelProgress");
+	if type(o) == "number" then
+		K.lastProgress = o;
+		K.reelProgressSeen = true;
+	end;
+	K.status = string.format("reeling %d%% (fish frozen%s)", math.floor(((K.lastProgress or 0)) * 100), t);
+end;
+a.GEO_MS = 200;
+function a.step(t)
+	local o = R("reelMain", function()
+			return S(S(S(r(), "PlayerGui"), "Fishing"), "Main");
+		end);
+	if not o then
+		return;
+	end;
+	local B = R("reelFish", function()
+			return S(o, "Fish");
+		end);
+	local G = R("reelMove", function()
+			return S(o, "Move");
+		end);
+	if not ((B and G)) then
+		return;
+	end;
+	local Q = a.holdBack(i("ReelProgress"), t);
+	local e = a.safeAt and (t < a.safeAt and string.format(", safe to finish in %.1fs", ((a.safeAt - t)) / 1000)) or "";
+	local v = a.geo;
+	if x.freezeFish and (a.pinValid == true and (v and (t - v.at < a.GEO_MS and a.pinFish(B, G, v.mx, v.mw, v.fx, v.fw, v.bx, v.bw, Q)))) then
+		a.frozen(e);
+		return;
+	end;
+	local k, J, q = V(o);
+	local M, b, P = V(B);
+	local O, Z, j = V(G);
+	if not ((k and (M and O))) or q < 10 then
+		return;
+	end;
+	a.geo = {
+			at = t,
+			mx = k,
+			mw = q,
+			fx = M,
+			fw = P,
+			bx = O,
+			bw = j,
+		};
+	if x.freezeFish and a.pinFish(B, G, k, q, M, P, O, j, Q) then
+		a.frozen(e);
+		return;
+	end;
+	local h = (((O + j / 2) - k)) / q;
+	local l = (((M + P / 2) - k)) / q;
+	local f = t / 1000;
+	if a.t then
+		local t = f - a.t;
+		if t < .004 then
+			return;
+		end;
+		local o = ((h - a.bc)) / t;
+		local B = ((l - a.fc)) / t;
+		a.vb = a.vb * .5 + o * .5;
+		a.vf = a.vf * .6 + B * .4;
+		local G = math.abs(o - a.vbRaw) / t;
+		a.vbRaw = o;
+		if math.abs(o) > .0001 and (G > .05 and (G < 20 and (h > .02 and h < .98))) then
+			a.acc = a.acc * .97 + G * .03;
+		end;
+	end;
+	a.t, a.bc, a.fc = f, h, l;
+	local E = math.max(a.acc, .3);
+	local X = l + a.vf * x.reelFishLead;
+	if Q then
+		X = l < .5 and 1 or 0;
+	end;
+	local y = ((a.vb * math.abs(a.vb)) / ((2 * E))) * x.reelBrake;
+	local c = (((X - h)) - y) - a.vb * x.reelLook > 0;
+	if a.repressAt then
+		if t < a.repressAt then
+			return;
+		end;
+		a.repressAt = nil;
+		a.hold = false;
+	end;
+	if c ~= a.hold or (c and not ((g.mouseHeld or g.spaceHeld))) then
+		a.setHold(c);
+		a.missSince = nil;
+	elseif x.reelWatchdog then
+		local o = a.gameHeld(G);
+		if o ~= nil and (o ~= c and t - K.phaseAt > 700) then
+			a.missSince = a.missSince or t;
+			if t - a.missSince >= x.reelRepressMs then
+				a.missSince = nil;
+				K.represses = K.represses + 1;
+				g.releaseAll();
+				if c then
+					a.repressAt = t + 30;
+				else
+					pcall(keyrelease, 32);
+					pcall(mouse1release);
+				end;
+			end;
+		else
+			a.missSince = nil;
+		end;
+	end;
+	local T = i("ReelProgress");
+	if type(T) == "number" then
+		K.lastProgress = T;
+		K.reelProgressSeen = true;
+	end;
+	K.status = string.format("reeling %d%%%s", math.floor(((K.lastProgress or 0)) * 100), e);
+end;
+local function C()
+	T.reset();
+	g.releaseAll();
+	a.reset();
+	E("IDLE");
+end;
+local eq = { rod = {}, pick = {} };
+local function equippedTool()
+	local p = r();
+	local c = p and p.Character;
+	if not c then
+		return nil;
+	end;
+	local ok, list = pcall(c.GetChildren, c);
+	for _, o in ipairs(ok and list or {}) do
+		local okc, cls = pcall(function()
+				return o.ClassName;
+			end);
+		if okc and cls == "Tool" then
+			return o;
+		end;
+	end;
+	return nil;
+end;
+local function tapKey(vk)
+	pcall(keypress, vk);
+	task.wait(.05);
+	pcall(keyrelease, vk);
+end;
+eq.words = { rod = "rod", pick = "pickaxe" };
+eq.file = "grandblue_settings.json";
+function eq.matches(slot, tool)
+	return tool ~= nil and string.find(string.lower(tool.Name), eq.words[slot], 1, true) ~= nil;
+end;
+function eq.load()
+	pcall(function()
+		if isfile and isfile(eq.file) then
+			local d = game:GetService("HttpService"):JSONDecode(readfile(eq.file));
+			if type(d) ~= "table" then
+				return;
+			end;
+			eq.saved = d;
+			for _, key in ipairs({ "rodKey", "pickKey", "weaponKey" }) do
+				if type(d[key]) == "number" then
+					x[key] = d[key];
+				end;
+			end;
+			for _, key in ipairs({ "freezeFish", "autoEquipRod", "autoEquipPick", "fightMobs", "fightReturn" }) do
+				if type(d[key]) == "boolean" then
+					x[key] = d[key];
+				end;
+			end;
+			if type(d.fightRange) == "number" then
+				x.fightRange = math.max(10, math.min(300, d.fightRange));
+			end;
+			if type(d.castPct) == "number" then
+				x.castPct = math.max(1, math.min(100, d.castPct));
+			end;
+		end;
+	end);
+end;
+eq.load();
+function eq.ensure(slot, vk)
+	if not vk or eq.busy then
+		return;
+	end;
+	eq.busy = true;
+	task.spawn(function()
+		pcall(function()
+			local cur = equippedTool();
+			if eq.matches(slot, cur) then
+				return;
+			end;
+			tapKey(vk);
+			task.wait(.35);
+			local now = equippedTool();
+			if not now and cur then
+				tapKey(vk);
+				task.wait(.35);
+				now = equippedTool();
+			end;
+			if not eq.matches(slot, now) then
+				local msg = "Wrong tool equipped (" .. (now and now.Name or "nothing") .. "), expected one with '" .. eq.words[slot] .. "' in the name. Check your slot key.";
+				pcall(notify, msg, 4);
+			end;
+		end);
+		eq.busy = false;
+	end);
+end;
+local fm = { fighting = false, ignore = {}, hurtAt = -1000000000.0, scanAt = 0 };
+local function L(t)
+	if K.running == t then
+		return;
+	end;
+	K.running = t;
+	C();
+	if not t and fm.abort then
+		fm.abort();
+	end;
+	if t and fm.markHome then
+		fm.markHome();
+	end;
+	K.recastAt = 0;
+	K.status = t and "starting" or "idle";
+	if t and (x.rodKey and x.autoEquipRod) then
+		eq.ensure("rod", x.rodKey);
+		K.recastAt = k() + 900;
+	end;
+	if t and G.setMining then
+		G.setMining(false);
+	end;
+	if t and G.setFarm then
+		G.setFarm(false);
+	end;
+end;
+G.setRunning = L;
+local function I(t)
+	a.setHold(false);
+	if ((K.lastProgress or 0)) >= .5 then
+		K.caught = K.caught + 1;
+	else
+		K.lost = K.lost + 1;
+	end;
+	K.lastProgress = 0;
+	K.reelEnded = true;
+	K.recastAt = t + x.recastAfterReelMs;
+	E("IDLE");
+end;
+local function D()
+	local t = k();
+	local o = tostring(i("QTEEvent") or "");
+	c.watch(t);
+	if o ~= K.lastEvent then
+		local B = K.lastEvent;
+		K.lastEvent = o;
+		if B == "Reel Fish" then
+			if not K.reelEnded then
+				I(t);
+			end;
+			K.reelEnded = false;
+		elseif B == "Gridshot" then
+			T.reset();
+			E("WAIT");
+		elseif B == "Timed Release" then
+			if K.phase == "CHARGE" then
+				g.release();
+			end;
+			E("WAIT");
+		end;
+		if o == "Gridshot" then
+			if K.phase == "CHARGE" then
+				g.release();
+			end;
+			T.reset();
+			E("SHAKE");
+		elseif o == "Reel Fish" then
+			T.reset();
+			a.reset();
+			K.lastProgress = 0;
+			E("REEL");
+			K.reelProgressSeen, K.reelEnded = false, false;
+		elseif o == "Timed Release" and K.phase ~= "CHARGE" then
+			E("WAIT");
+		end;
+	end;
+	if o == "Reel Fish" and (K.phase == "REEL" and (K.reelProgressSeen and i("ReelProgress") == nil)) then
+		I(t);
+	end;
+	local B = o == "Reel Fish" and K.reelEnded;
+	if not K.running then
+		return;
+	end;
+	if not f() then
+		g.releaseAll();
+		T.stage = "SEEK";
+		if K.phase == "CHARGE" then
+			E("IDLE");
+		end;
+		K.status = "paused (Roblox not focused)";
+		return;
+	end;
+	if o == "Gridshot" then
+		T.step(t);
+	elseif o == "Reel Fish" and not B then
+		a.step(t);
+	elseif K.phase == "IDLE" or K.phase == "CHARGE" then
+		c.step(t, B and "" or o);
+	elseif o == "" then
+		if t - K.phaseAt > x.idleTimeoutMs then
+			K.status = "no bite, recasting";
+			E("IDLE");
+		else
+			K.status = string.format("waiting for bite %ds", math.floor(((t - K.phaseAt)) / 1000));
+		end;
+	elseif o == "Timed Release" then
+		K.status = "cast bar up";
+	else
+		g.releaseAll();
+		K.status = "other QTE: " .. o;
+	end;
+end;
+local w = {
+		running = false,
+		phase = "IDLE",
+		phaseAt = 0,
+		status = "idle",
+		swings = 0,
+		releases = 0,
+		noBar = 0,
+		gaveUp = 0,
+		triggerAt = 0,
+		lastEvent = "",
+		timer = X.new(),
+	};
+function w.passedAllZones(t, o)
+	if not t.fill or t.dir == 0 or #o == 0 then
+		return false;
+	end;
+	local B = X.predict(t, X.delay(t), o);
+	if not B then
+		return false;
+	end;
+	for o, G in ipairs(o) do
+		if t.dir > 0 and B <= G.hi then
+			return false;
+		end;
+		if t.dir < 0 and B >= G.lo then
+			return false;
+		end;
+	end;
+	return true;
+end;
+function w.read()
+	return X.readBar("Mining");
+end;
+function w.setPhase(t, o)
+	w.phase, w.phaseAt = t, o;
+end;
+function w.step(t)
+	local o = w.phase == "COOLDOWN" or w.phase == "SWING";
+	local B = tostring(i("QTEEvent", o and .1 or nil) or "");
+	local G = w.timer;
+	local Q, e = w.read();
+	if Q and (B == "" and w.phase == "SWING") then
+		B = tostring(i("QTEEvent", .01) or "");
+	end;
+	if B ~= w.lastEvent then
+		if w.lastEvent ~= "" and w.phase == "QTE" then
+			g.release();
+			w.setPhase("COOLDOWN", t);
+		end;
+		w.lastEvent = B;
+		w.triggerAt = 0;
+	end;
+	if not f() then
+		g.release();
+		if w.phase == "SWING" then
+			w.setPhase("IDLE", t);
+		end;
+		w.status = "paused (Roblox not focused)";
+		return;
+	end;
+	if not Q and G.sentAt then
+		X.gone(G, t);
+	end;
+	if Q and B ~= "" then
+		if w.phase ~= "QTE" then
+			w.setPhase("QTE", t);
+			X.reset(G);
+		end;
+		local o = X.observe(G, Q, t, e);
+		local B = "";
+		for t, o in ipairs(e) do
+			B = B .. string.format(" %.1f-%.1f%%", o.lo * 100, o.hi * 100);
+		end;
+		w.status = string.format("bar %d%%  zone%s  delay %d fr", math.floor(Q * 100), B ~= "" and B or " ?", X.delay(G));
+		if o and (#e > 0 and t - w.triggerAt > 250) then
+			local o = X.shouldSend(G, e);
+			if not o and w.passedAllZones(G, e) then
+				o = true;
+				w.gaveUp = w.gaveUp + 1;
+			end;
+			if o then
+				w.triggerAt = t;
+				X.sent(G, t);
+				w.releases = w.releases + 1;
+				if g.mouseHeld then
+					g.release();
+				else
+					g.press();
+				end;
+			end;
+		end;
+		return;
+	end;
+	if B ~= "" then
+		w.status = "waiting (" .. (B .. ")");
+		return;
+	end;
+	if w.phase == "QTE" then
+		g.release();
+		w.setPhase("COOLDOWN", t);
+	end;
+	if w.phase == "COOLDOWN" then
+		if t - w.phaseAt < x.mineSwingDelayMs then
+			w.status = string.format("next swing in %dms", math.floor(x.mineSwingDelayMs - ((t - w.phaseAt))));
+			return;
+		end;
+		w.setPhase("IDLE", t);
+	end;
+	if w.phase == "IDLE" then
+		if not x.mineAutoSwing then
+			w.status = "waiting for a mining bar";
+			return;
+		end;
+		g.press();
+		w.swings = w.swings + 1;
+		w.setPhase("SWING", t);
+		w.status = "swinging";
+		return;
+	end;
+	if w.phase == "SWING" and t - w.phaseAt > x.mineStartTimeoutMs then
+		g.release();
+		w.noBar = w.noBar + 1;
+		w.setPhase("COOLDOWN", t);
+		w.status = "no mining bar (pickaxe out, facing ore?)";
+	end;
+end;
+local function u(t)
+	local o, B = pcall(function()
+			return t.Position;
+		end);
+	if o and typeof(B) == "Vector3" then
+		return B;
+	end;
+	local G, x = pcall(t.GetChildren, t);
+	for t, o in ipairs(G and x or {}) do
+		local B, G = pcall(function()
+				return o.Position;
+			end);
+		if B and typeof(G) == "Vector3" then
+			return G;
+		end;
+	end;
+	local Q, e = pcall(t.GetDescendants, t);
+	for t, o in ipairs(Q and e or {}) do
+		if t > 60 then
+			break;
+		end;
+		local B, G = pcall(function()
+				return o.Position;
+			end);
+		if B and typeof(G) == "Vector3" then
+			return G;
+		end;
+	end;
+	return nil;
+end;
+local m = {
+		running = false,
+		status = "idle",
+		kills = 0,
+		target = nil,
+		targetSince = 0,
+		bestDist = math.huge,
+		progressAt = 0,
+		blacklist = {},
+		keys = {},
+		lastPos = nil,
+		lastMoveAt = 0,
+		lastJumpAt = 0,
+		jumpUntil = 0,
+		pressAt = 0,
+		attacking = false,
+		hitSince = 0,
+		params = nil,
+		paramsFor = nil,
+		octant = nil,
+		detourSide = 1,
+		strafeUntil = 0,
+		follow = nil,
+		navAt = 0,
+		navX = nil,
+		navZ = nil,
+		navHop = false,
+		navBest = nil,
+		navBestAt = 0,
+	};
+local A = {
+		W = 87,
+		A = 65,
+		S = 83,
+		D = 68,
+		SPACE = 32,
+	};
+function m.key(t, o)
+	if o and not m.keys[t] then
+		m.keys[t] = true;
+		pcall(keypress, t);
+	elseif not o and m.keys[t] then
+		m.keys[t] = nil;
+		pcall(keyrelease, t);
+	end;
+end;
+function m.releaseMove()
+	m.key(A.W, false);
+	m.key(A.A, false);
+	m.key(A.S, false);
+	m.key(A.D, false);
+end;
+function m.releaseAll()
+	m.releaseMove();
+	m.key(A.SPACE, false);
+	if m.attacking then
+		g.release();
+		m.attacking = false;
+	end;
+end;
+local function H(t)
+	local o, B, G, x = pcall(function()
+			return t.Parent, t:GetAttribute("NPCType"), t:GetAttribute("Dead");
+		end);
+	return o and (B ~= nil and ((G == "Chicken" or t == m.fightTarget) and not x));
+end;
+local function d(t, o)
+	local B, G = t.X - o.X, t.Z - o.Z;
+	return math.sqrt(B * B + G * G);
+end;
+function m.targetPos(t, o)
+	if m.rootFor ~= t or (not m.root and o - ((m.rootAt or -1000000000.0)) > 500) then
+		m.rootFor, m.root, m.rootAt = t, S(t, "HumanoidRootPart"), o;
+	end;
+	if m.root then
+		local t, o = pcall(function()
+				return m.root.Position;
+			end);
+		if t and typeof(o) == "Vector3" then
+			return o;
+		end;
+		m.rootFor = nil;
+	end;
+	return u(t);
+end;
+function m.pick(t, o)
+	local B = S(workspace, "Entities");
+	local G, Q = pcall(function()
+			return B:GetChildren();
+		end);
+	local e, v = nil, math.huge;
+	for B, G in ipairs(G and Q or {}) do
+		local Q, k = pcall(function()
+				return G.Name;
+			end);
+		local r = Q and string.sub(tostring(k), 1, 7) == "Chicken";
+		if r and (H(G) and not ((((m.blacklist[G] or 0)) > o))) then
+			local o = u(S(G, "HumanoidRootPart") or G);
+			if o then
+				local B = d(o, t);
+				if B < v and B <= x.farmMaxDistance then
+					e, v = G, B;
+				end;
+			end;
+		end;
+	end;
+	return e;
+end;
+function m.rayParams(t)
+	if m.paramsFor == t and m.params then
+		return m.params;
+	end;
+	local o, B = pcall(function()
+			local o = RaycastParams.new();
+			o.FilterType = Enum.RaycastFilterType.Exclude;
+			local B = { t };
+			local G = S(workspace, "Entities");
+			if G then
+				B[2] = G;
+			end;
+			o.FilterDescendantsInstances = B;
+			pcall(function()
+				o.RespectCanCollide = true;
+			end);
+			return o;
+		end);
+	m.params, m.paramsFor = o and B or nil, t;
+	return m.params;
+end;
+function m.ground(t, o)
+	local B, G = pcall(function()
+			return workspace:Raycast(t, Vector3.new(0, -12, 0), o);
+		end);
+	if B and G then
+		return G.Position.Y;
+	end;
+	return t.Y - 2;
+end;
+local function z(t)
+	if not t then
+		return false;
+	end;
+	local o, B = pcall(function()
+			return t.Normal.Y;
+		end);
+	return not ((o and (type(B) == "number" and B > .6)));
+end;
+function m.clear(t, o, B, G, x, Q)
+	local e = Vector3.new(o * G, 0, B * G);
+	local v, k = pcall(function()
+			return workspace:Raycast(Vector3.new(t.X, Q + 2.6, t.Z), e, x);
+		end);
+	local S, r = pcall(function()
+			return workspace:Raycast(Vector3.new(t.X, Q + .5, t.Z), e, x);
+		end);
+	local J, q = pcall(function()
+			return workspace:Raycast(Vector3.new(t.X, Q + 1.5, t.Z), e, x);
+		end);
+	if J and z(q) then
+		return false, false, false;
+	end;
+	local M = not ((v and z(k)));
+	local b = not ((S and z(r)));
+	local P = false;
+	if M and not b then
+		local t, o = pcall(function()
+				return r.Distance;
+			end);
+		P = t and (type(o) == "number" and o <= 2.5);
+	end;
+	return M and b, M and not b, P;
+end;
+function m.steer(t, o)
+	local B, G = pcall(function()
+			return workspace.CurrentCamera.CFrame.LookVector;
+		end);
+	if not ((B and G)) then
+		m.releaseMove();
+		return;
+	end;
+	local x, Q = G.X, G.Z;
+	local e = math.sqrt(x * x + Q * Q);
+	if e < .0001 then
+		m.releaseMove();
+		return;
+	end;
+	x, Q = x / e, Q / e;
+	local v = t * x + o * Q;
+	local k = t * -Q + o * x;
+	local S = math.deg(math.atan2(k, v));
+	local r = math.floor(S / 45 + .5) % 8;
+	local J = m.octant;
+	if J then
+		local t = math.abs((((S - J * 45) + 540)) % 360 - 180);
+		if t <= 32 then
+			r = J;
+		end;
+	end;
+	m.octant = r;
+	local q = math.rad(r * 45);
+	local M, b = math.cos(q), math.sin(q);
+	m.key(A.W, M > .3);
+	m.key(A.S, M < -0.3);
+	m.key(A.D, b > .3);
+	m.key(A.A, b < -0.3);
+end;
+function m.jump(t)
+	if t < m.jumpUntil then
+		return;
+	end;
+	if m.keys[A.SPACE] then
+		m.key(A.SPACE, false);
+		return;
+	end;
+	if t - m.lastJumpAt < 450 then
+		return;
+	end;
+	m.lastJumpAt, m.jumpUntil = t, t + 90;
+	m.key(A.SPACE, true);
+end;
+local function p(t, o, B)
+	local G = math.rad(B);
+	local x, Q = math.cos(G), math.sin(G);
+	return t * x - o * Q, t * Q + o * x;
+end;
+function m.walkTo(t, o, B, G, x, Q)
+	local e, v = o - t.X, B - t.Z;
+	local k = math.sqrt(e * e + v * v);
+	if k < .001 then
+		m.releaseMove();
+		return;
+	end;
+	local S, r = e / k, v / k;
+	local J = m.lastPos and (((t.X - m.lastPos.X)) ^ 2 + ((t.Z - m.lastPos.Z)) ^ 2) > .16;
+	if J or not m.lastPos then
+		m.lastPos, m.lastMoveAt = t, Q;
+	end;
+	local q = Q - m.lastMoveAt;
+	if not m.navBest or k < m.navBest - 1 or k > m.navBest + 15 then
+		m.navBest, m.navBestAt, m.navBestPos = k, Q, t;
+	end;
+	local M = Q - m.navBestAt > 1500 and (m.navBestPos and d(t, m.navBestPos) < 5);
+	if m.navX and (Q - ((m.navAt or 0)) < 33 and Q >= m.strafeUntil) then
+		m.steer(m.navX, m.navZ);
+		if m.navHop or q > 600 then
+			m.jump(Q);
+		end;
+		return;
+	end;
+	m.navAt = Q;
+	local b = m.rayParams(G);
+	local P, O, Z = S, r, false;
+	if b then
+		local o = m.ground(t, b);
+		local B = q < 900;
+		local function G(G, x)
+			local Q, e = p(S, r, G);
+			local v, k, J = m.clear(t, Q, e, x, b, o);
+			return v or (k and B), J, Q, e;
+		end;
+		local x = math.min(5, k);
+		local e = m.follow;
+		if e and (Q >= e.hold and G(0, math.min(12, k))) then
+			m.follow, e = nil, nil;
+		end;
+		if not e and M then
+			e = {
+					side = -m.detourSide,
+					since = Q,
+					best = k,
+					hold = Q + 2000,
+				};
+			m.follow, m.navBestAt, m.navBestPos = e, Q, t;
+		end;
+		if not e then
+			local t, o = G(0, x);
+			if t then
+				Z = o;
+			else
+				local t = m.detourSide;
+				for o = 25, 150, 25 do
+					local B, Q = G(o, x), G(-o, x);
+					if B ~= Q then
+						t = B and 1 or -1;
+					end;
+					if B or Q then
+						break;
+					end;
+				end;
+				e = {
+						side = t,
+						since = Q,
+						best = k,
+						hold = 0,
+					};
+				m.follow = e;
+			end;
+		end;
+		if e then
+			if k < e.best - 1 then
+				e.best, e.since = k, Q;
+			end;
+			if Q - e.since > 3500 then
+				e.side, e.since, e.best = -e.side, Q, k;
+			end;
+			m.detourSide = e.side;
+			P, O = -S, -r;
+			for t = 20, 180, 20 do
+				local o, B, Q, v = G(t * e.side, x);
+				if o then
+					P, O, Z = Q, v, B;
+					break;
+				end;
+			end;
+		end;
+	end;
+	if q > 1500 and Q >= m.strafeUntil then
+		m.detourSide = -m.detourSide;
+		m.strafeUntil, m.lastMoveAt = Q + 700, Q;
+		q = 0;
+	end;
+	if Q < m.strafeUntil then
+		P, O = p(S, r, 90 * m.detourSide);
+	end;
+	m.navX, m.navZ, m.navHop = P, O, Z;
+	m.steer(P, O);
+	if Z or q > 600 then
+		m.jump(Q);
+	end;
+end;
+function m.step(t)
+	if not f() then
+		m.releaseAll();
+		m.status = "paused (Roblox not focused)";
+		return;
+	end;
+	if m.keys[A.SPACE] and t >= m.jumpUntil then
+		m.key(A.SPACE, false);
+	end;
+	local o = r() and (r()).Character;
+	local B = l();
+	local G, Q = pcall(function()
+			return B.Position;
+		end);
+	if not ((G and Q)) then
+		m.releaseAll();
+		m.status = "no character";
+		return;
+	end;
+	local e = m.target;
+	local v = not e or t - ((m.liveAt or -1000000000.0)) >= 150;
+	if v then
+		m.liveAt = t;
+	end;
+	if e and (v and not H(e)) then
+		if m.hitSince > 0 then
+			m.kills = m.kills + 1;
+		end;
+		e = nil;
+	end;
+	if e and ((m.blacklist[e] or 0)) > t then
+		e = nil;
+	end;
+	if not e and t - ((m.pickAt or -1000000000.0)) >= 300 then
+		m.pickAt = t;
+		if m.attacking then
+			g.release();
+			m.attacking = false;
+		end;
+		e = m.pick(Q, t);
+		m.target, m.targetSince, m.bestDist, m.progressAt, m.hitSince = e, t, math.huge, t, 0;
+		m.follow, m.navBest = nil, nil;
+	end;
+	if not e then
+		m.releaseAll();
+		m.status = "no chickens nearby";
+		return;
+	end;
+	local k = m.targetPos(e, t);
+	if not k then
+		m.target = nil;
+		return;
+	end;
+	local S = d(k, Q);
+	if S < m.bestDist - .5 then
+		m.bestDist, m.progressAt = S, t;
+	end;
+	if S > x.farmAttackRange and t - m.progressAt > x.farmGiveUpMs then
+		m.blacklist[e] = t + 20000;
+		m.target = nil;
+		m.releaseAll();
+		m.status = "can\'t reach that chicken, next";
+		return;
+	end;
+	local J = x.farmAttackRange + ((m.attacking and 1.5 or 0));
+	if S <= J then
+		m.releaseMove();
+		if not m.attacking then
+			g.press();
+			m.attacking, m.pressAt = true, t;
+			if m.hitSince == 0 then
+				m.hitSince = t;
+			end;
+		elseif x.farmRepressMs > 0 and (g.mouseHeld and t - m.pressAt >= x.farmRepressMs) then
+			g.release();
+			m.pressAt = t;
+		elseif not g.mouseHeld and t - m.pressAt >= 40 then
+			g.press();
+			m.pressAt = t;
+		end;
+		m.bestDist, m.progressAt, m.navBest = S, t, nil;
+		m.status = string.format("attacking chicken (%.1f studs)", S);
+		return;
+	end;
+	if m.attacking then
+		g.release();
+		m.attacking = false;
+	end;
+	m.walkTo(Q, k.X, k.Z, o, e, t);
+	m.status = string.format("walking to chicken (%d studs)", math.floor(S));
+end;
+fm.keywords = { "fishfolk", "fishman", "fish man", "fish-man", "fishmen", "sea king", "seaking", "sea beast", "merman", "sea monster" };
+function fm.key(e)
+	local ok, name = pcall(function()
+			return tostring(e.Name);
+		end);
+	return ok and name or "?";
+end;
+function fm.alive(e)
+	if not e then
+		return false;
+	end;
+	local ok, parent, dead = pcall(function()
+			return e.Parent, e:GetAttribute("Dead");
+		end);
+	return ok and (parent ~= nil and not dead);
+end;
+function fm.markHome()
+	local root = l();
+	local ok, cf, pos = pcall(function()
+			return root.CFrame, root.Position;
+		end);
+	if ok and pos then
+		fm.homeCF, fm.homePos = cf, pos;
+	end;
+end;
+function fm.abort()
+	if fm.fighting then
+		m.releaseAll();
+		m.fightTarget = nil;
+	end;
+	fm.fighting, fm.state, fm.mob = false, nil, nil;
+end;
+function fm.trackHealth(t)
+	if t - (fm.hpAt or -1000000000.0) < 100 then
+		return;
+	end;
+	fm.hpAt = t;
+	local p = r();
+	local hum = S(p and p.Character, "Humanoid");
+	local ok, hp = pcall(function()
+			return hum.Health;
+		end);
+	if ok and type(hp) == "number" then
+		if fm.hp and hp < fm.hp - .5 then
+			fm.hurtAt = t;
+		end;
+		fm.hp = hp;
+	end;
+end;
+function fm.find(pos, t)
+	local list = S(workspace, "Entities");
+	local ok, kids = pcall(function()
+			return list:GetChildren();
+		end);
+	local best, bestD, why = nil, math.huge, nil;
+	local hurt = t - fm.hurtAt < 3000;
+	for _, e in ipairs(ok and kids or {}) do
+		local okp, isPet = pcall(function()
+				return e:GetAttribute("Pet") or e:GetAttribute("Summoner") or e:GetAttribute("PlayerCharacter");
+			end);
+		if okp and not isPet and (fm.alive(e) and (fm.ignore[fm.key(e)] or 0) < t) then
+			local okn, name, npc = pcall(function()
+					return tostring(e.Name), e:GetAttribute("NPCType");
+				end);
+			if okn then
+				local lname = string.lower(name);
+				local lnpc = string.lower(tostring(npc or ""));
+				local isFish = false;
+				for _, word in ipairs(fm.keywords) do
+					if string.find(lname, word, 1, true) or string.find(lnpc, word, 1, true) then
+						isFish = true;
+						break;
+					end;
+				end;
+				local hostileHit = hurt and (npc ~= nil and npc ~= "Chicken");
+				if isFish or hostileHit then
+					local p = u(S(e, "HumanoidRootPart") or e);
+					if p then
+						local dist = d(p, pos);
+						local limit = isFish and x.fightRange or math.min(45, x.fightRange);
+						if dist <= limit and dist < bestD then
+							best, bestD, why = e, dist, name;
+						end;
+					end;
+				end;
+			end;
+		end;
+	end;
+	return best, why;
+end;
+function fm.begin(mob, name, t)
+	fm.state, fm.fighting, fm.mob, fm.startedAt = "FIGHT", true, mob, t;
+	C();
+	m.releaseAll();
+	m.target, m.blacklist, m.lastPos = nil, {}, nil;
+	m.params, m.paramsFor = nil, nil;
+	m.octant, m.strafeUntil, m.follow, m.navX, m.navBest = nil, 0, nil, nil, nil;
+	m.attacking, m.hitSince, m.fightTarget = false, 0, mob;
+	K.status = "fighting " .. tostring(name);
+	pcall(notify, "Fighting " .. tostring(name), 2);
+	if x.weaponKey and not fm.equipBusy then
+		fm.equipBusy = true;
+		task.spawn(function()
+			pcall(function()
+				local cur = equippedTool();
+				if not cur or eq.matches("rod", cur) then
+					tapKey(x.weaponKey);
+					task.wait(.35);
+				end;
+			end);
+			fm.equipBusy = false;
+		end);
+	end;
+end;
+function fm.finish(t)
+	m.releaseAll();
+	m.fightTarget = nil;
+	fm.state, fm.fighting, fm.mob = nil, false, nil;
+	C();
+	K.recastAt = t + 1300;
+	K.status = "back to fishing";
+	if x.rodKey then
+		eq.ensure("rod", x.rodKey);
+	end;
+end;
+function fm.beginReturn(t)
+	m.releaseAll();
+	if fm.mob and fm.alive(fm.mob) then
+		fm.ignore[fm.key(fm.mob)] = t + 30000;
+	end;
+	m.fightTarget = nil;
+	if not (x.fightReturn and fm.homeCF) then
+		fm.finish(t);
+		return;
+	end;
+	fm.state, fm.returnAt, fm.tpAt, fm.tpTries = "RETURN", t, -1000000000.0, 0;
+	K.status = "returning to fishing spot";
+end;
+function fm.step(t)
+	local root = l();
+	local ok, pos = pcall(function()
+			return root.Position;
+		end);
+	if not ok or not pos then
+		return fm.fighting;
+	end;
+	fm.trackHealth(t);
+	if fm.state == "FIGHT" then
+		local mob = fm.mob;
+		if not fm.alive(mob) or t - fm.startedAt > 45000 then
+			if fm.alive(mob) then
+				K.status = "gave up on monster";
+			else
+				K.status = "monster down";
+			end;
+			fm.beginReturn(t);
+			return true;
+		end;
+		m.target, m.fightTarget = mob, mob;
+		m.step(t);
+		if m.target ~= mob then
+			fm.beginReturn(t);
+		end;
+		return true;
+	elseif fm.state == "RETURN" then
+		local dist = d(pos, fm.homePos);
+		if dist <= 6 or t - fm.returnAt > 12000 then
+			fm.finish(t);
+			return true;
+		end;
+		if fm.tpTries < 2 and t - fm.tpAt >= 400 then
+			fm.tpAt, fm.tpTries = t, fm.tpTries + 1;
+			pcall(function()
+				root.CFrame = fm.homeCF;
+			end);
+			return true;
+		end;
+		if fm.tpTries >= 2 and t - fm.tpAt >= 400 then
+			local p = r();
+			m.walkTo(pos, fm.homePos.X, fm.homePos.Z, p and p.Character, nil, t);
+			K.status = string.format("walking back (%d studs)", math.floor(dist));
+		end;
+		return true;
+	end;
+	if not x.fightMobs or not fm.homeCF then
+		return false;
+	end;
+	if t - fm.scanAt < 300 then
+		return false;
+	end;
+	fm.scanAt = t;
+	local mob, name = fm.find(pos, t);
+	if mob then
+		fm.begin(mob, name, t);
+		return true;
+	end;
+	return false;
+end;
+local F = {
+		chests = false,
+		fruits = false,
+		targets = {},
+		scanAt = 0,
+		drawAt = 0,
+		pool = {},
+	};
+local s = { Chest = Color3.fromRGB(255, 205, 60), ["Fruit Chest"] = Color3.fromRGB(190, 110, 255), Fruit = Color3.fromRGB(255, 90, 170) };
+local te = {
+		Chop = true,
+		Bomb = true,
+		Wolf = true,
+		Invisibility = true,
+		Strength = true,
+		Spin = true,
+		Clothing = true,
+		Weight = true,
+		Swim = true,
+		Flame = true,
+		Darkness = true,
+		Cannon = true,
+		Spike = true,
+		Drain = true,
+		Barrier = true,
+	};
+local function oe(t)
+	if type(t) ~= "string" then
+		return false;
+	end;
+	local o = string.match(t, "^(.-) Fruit$");
+	return (o and te[o]) or te[t] or false;
+end;
+function F.scan(t)
+	local o = {};
+	if F.chests and ((not F.chestList or ((t or 0)) - ((F.chestAt or 0)) >= 5000)) then
+		F.chestAt = t or 0;
+		local o = {};
+		local B = S(S(workspace, "AA IMPORTANT"), "ChestSpawns");
+		local G, x = pcall(function()
+				return B:GetChildren();
+			end);
+		for t, B in ipairs(G and x or {}) do
+			local G, x = pcall(B.GetChildren, B);
+			for t, B in ipairs(G and x or {}) do
+				local G = S(B, "Chest");
+				if G then
+					local t = u(S(G, "MetalBottom") or G) or u(B);
+					if t then
+						o[#o + 1] = { kind = "Chest", name = "Chest", pos = t };
+					end;
+				end;
+			end;
+		end;
+		F.chestList = o;
+	end;
+	if F.chests then
+		for t, B in ipairs(F.chestList or {}) do
+			o[#o + 1] = B;
+		end;
+	else
+		F.chestList = nil;
+	end;
+	if F.fruits then
+		local t = S(workspace, "Visuals");
+		local B, G = pcall(function()
+				return t:GetChildren();
+			end);
+		for t, B in ipairs(B and G or {}) do
+			local G, x = pcall(function()
+					return tostring(B.Name);
+				end);
+			local Q = G and ((string.match(x, "^(.-) Fruit$") or x)) or "";
+			local e, v, k = false, nil, nil;
+			if te[Q] then
+				e, v, k = pcall(function()
+						return B:GetAttribute("FruitId"), B:GetAttribute("Interaction");
+					end);
+			end;
+			if e and ((v ~= nil or k == "Devil Fruit")) then
+				local t = u(B);
+				if t then
+					local B = te[Q] and (Q .. " Fruit") or ("Devil Fruit (" .. (x .. ")"));
+					o[#o + 1] = { kind = "Fruit", name = B, pos = t };
+				end;
+			end;
+		end;
+		local x = S(workspace, "Fruit Chests");
+		local Q, e = pcall(function()
+				return x:GetChildren();
+			end);
+		for t, B in ipairs(Q and e or {}) do
+			local G = u(S(B, "Handle") or B);
+			if G then
+				o[#o + 1] = { kind = "Fruit Chest", name = "Fruit Chest", pos = G };
+			end;
+		end;
+		local v = S(workspace, "Drops");
+		local k, r = pcall(function()
+				return v:GetChildren();
+			end);
+		for t, B in ipairs(k and r or {}) do
+			local G = oe(B.Name) and B or nil;
+			if not G then
+				local t, o = pcall(B.GetChildren, B);
+				for t, o in ipairs(t and o or {}) do
+					if oe(o.Name) then
+						G = o;
+						break;
+					end;
+				end;
+			end;
+			if G then
+				local t = u(S(G, "Handle") or G);
+				if t then
+					o[#o + 1] = { kind = "Fruit", name = G.Name, pos = t };
+				end;
+			end;
+		end;
+	end;
+	F.targets = o;
+	F.count = #o;
+end;
+function F.slot(t)
+	local o = F.pool[t];
+	if not o then
+		o = {
+				box = Drawing.new("Square"),
+				text = Drawing.new("Text"),
+				vis = false,
+				x = nil,
+				y = nil,
+				size = nil,
+				label = nil,
+				kind = nil,
+			};
+		o.box.Filled, o.box.Thickness, o.box.Visible = false, 1.5, false;
+		o.text.Center, o.text.Outline, o.text.Visible = true, true, false;
+		o.text.Size = x.espTextSize;
+		F.pool[t] = o;
+	end;
+	return o;
+end;
+function F.hideFrom(t)
+	for t = t, #F.pool, 1 do
+		local o = F.pool[t];
+		if o.vis then
+			o.box.Visible, o.text.Visible = false, false;
+			o.vis = false;
+		end;
+	end;
+end;
+function F.step(t)
+	if not ((F.chests or F.fruits or F.chickens)) then
+		F.count = 0;
+		if F.shown then
+			F.hideFrom(1);
+			F.shown = false;
+		end;
+		return;
+	end;
+	if t - F.scanAt >= 1000 then
+		F.scanAt = t;
+		F.scan(t);
+	end;
+	if t - F.drawAt < 16 then
+		return;
+	end;
+	F.drawAt = t;
+	local o = l();
+	local B, G = pcall(function()
+			return o.Position;
+		end);
+	local x = 0;
+	for t, o in ipairs(F.targets) do
+		local Q = o.pos;
+		if o.part then
+			local t, B = pcall(function()
+					return o.part.Position;
+				end);
+			if t and B then
+				Q = B;
+			end;
+		end;
+		local e = 0;
+		if B and G then
+			local t = Q - G;
+			e = math.sqrt((t.X * t.X + t.Y * t.Y) + t.Z * t.Z);
+		end;
+		local v, k, S = pcall(WorldToScreen, Q);
+		if v and S then
+			x = x + 1;
+			local t = F.slot(x);
+			local B = math.floor(math.clamp(1600 / math.max(e, 1), 8, 30));
+			local G, Q = math.floor(k.X), math.floor(k.Y);
+			if t.kind ~= o.kind then
+				local B = s[o.kind] or s.Fruit;
+				t.box.Color, t.text.Color, t.kind = B, B, o.kind;
+			end;
+			if t.size ~= B then
+				t.box.Size, t.size = Vector2.new(B, B), B;
+				t.x = nil;
+			end;
+			if t.x ~= G or t.y ~= Q then
+				t.box.Position = Vector2.new(G - B / 2, Q - B / 2);
+				t.text.Position = Vector2.new(G, (Q + B / 2) + 2);
+				t.x, t.y = G, Q;
+			end;
+			local v = o.name .. ("  " .. math.floor(e));
+			if t.label ~= v then
+				t.text.Text, t.label = v, v;
+			end;
+			if not t.vis then
+				t.box.Visible, t.text.Visible, t.vis = true, true, true;
+			end;
+		end;
+	end;
+	F.hideFrom(x + 1);
+	F.shown = x > 0;
+end;
+function F.destroy()
+	local t = F.pool;
+	F.pool = {};
+	for t, o in ipairs(t) do
+		pcall(function()
+			o.box:Remove();
+		end);
+		pcall(function()
+			o.text:Remove();
+		end);
+	end;
+end;
+local Be = {
+		on = false,
+		target = nil,
+		name = nil,
+		readAt = 0,
+		drawAt = 0,
+		box = nil,
+		outline = nil,
+		label = nil,
+	};
+local Ge = { ["Anchor Town"] = { bounds = Vector3.new(1700, 820, 2500), origin = Vector3.new(-150, 311, 50) }, ["Clown Town"] = { bounds = Vector3.new(1474, 820, 1789), origin = Vector3.new(2655, 274.2, -222) }, ["Maple Village"] = { bounds = Vector3.new(1395, 820, 1566), origin = Vector3.new(-64, 336.9, -2995) } };
+local xe = Color3.fromRGB(255, 200, 40);
+function Be.read()
+	local t = S(r(), "PlayerGui");
+	local o = { { S(t, "TreasureMapPin"), "MiniMap" }, { S(t, "TreasureUi"), "Map" } };
+	for t, o in ipairs(o) do
+		local B = S(S(S(o[1], o[2]), "TopGrid"), "MapScrollTop");
+		local G = S(B, "Color");
+		local x = S(G, "TreasureMarker");
+		if x then
+			local t, o, B, Q = V(G);
+			local e, v, k, r = V(x);
+			local J = t ~= nil and e ~= nil;
+			local q, M, b, P = { X = t, Y = o }, { X = B, Y = Q }, { X = e, Y = v }, { X = k, Y = r };
+			if J and (M and (M.X > 1 and M.Y > 1)) then
+				local t = (((b.X + P.X / 2) - q.X)) / M.X;
+				local o = (((b.Y + P.Y / 2) - q.Y)) / M.Y;
+				local B = M.X / M.Y;
+				local G, x, Q = nil, nil, math.huge;
+				for t, o in pairs(Ge) do
+					local e = math.abs(o.bounds.X / o.bounds.Z - B);
+					if e < Q then
+						G, x, Q = t, o, e;
+					end;
+				end;
+				if x and Q < .02 then
+					local B = x.origin.X + ((t - .5)) * x.bounds.X;
+					local Q = x.origin.Z + ((o - .5)) * x.bounds.Z;
+					local e = S(S(S(S(S(workspace, "Islands"), G), "Constants"), "TreasureMapLocations"), "DigSpots");
+					local v, k = pcall(function()
+							return e:GetChildren();
+						end);
+					local r, J, q = nil, nil, 40;
+					for t, o in ipairs(v and k or {}) do
+						local G, x = pcall(function()
+								return o.Position;
+							end);
+						if G and x then
+							local t, G = x.X - B, x.Z - Q;
+							local e = math.sqrt(t * t + G * G);
+							if e < q then
+								r, J, q = o.Name, x, e;
+							end;
+						end;
+					end;
+					if J then
+						return J, G .. (" " .. tostring(r));
+					end;
+					return Vector3.new(B, x.origin.Y, Q), G .. " (approx)";
+				end;
+			end;
+		end;
+	end;
+	return nil;
+end;
+function Be.hide()
+	if Be.box and Be.shown then
+		Be.box.Visible, Be.outline.Visible, Be.label.Visible = false, false, false;
+		Be.shown = false;
+	end;
+end;
+function Be.step(t)
+	if not Be.on then
+		Be.hide();
+		return;
+	end;
+	if t - Be.readAt >= 1000 then
+		Be.readAt = t;
+		Be.target, Be.name = Be.read();
+	end;
+	local o = Be.target;
+	if not o then
+		Be.hide();
+		return;
+	end;
+	if t - Be.drawAt < 16 then
+		return;
+	end;
+	Be.drawAt = t;
+	if not Be.box then
+		Be.outline = Drawing.new("Square");
+		Be.outline.Filled, Be.outline.Thickness = false, 4;
+		Be.outline.Color = Color3.fromRGB(0, 0, 0);
+		Be.box = Drawing.new("Square");
+		Be.box.Filled, Be.box.Thickness, Be.box.Color = false, 2, xe;
+		Be.label = Drawing.new("Text");
+		Be.label.Size, Be.label.Center, Be.label.Outline = 16, true, true;
+		Be.label.Color = xe;
+	end;
+	local B = l();
+	local G = 0;
+	local x, Q = pcall(function()
+			return B.Position;
+		end);
+	if x and Q then
+		local t = o - Q;
+		G = math.floor(math.sqrt((t.X * t.X + t.Y * t.Y) + t.Z * t.Z));
+	end;
+	local e = workspace.CurrentCamera;
+	local v = e.ViewportSize;
+	local k, S, r = pcall(WorldToScreen, o);
+	local J, q, M;
+	if k and r then
+		J, q = S.X, S.Y;
+		M = math.clamp(3000 / math.max(G, 1), 14, 60);
+	else
+		local t = e.CFrame;
+		local B = o - t.Position;
+		local G, x = B:Dot(t.RightVector), -B:Dot(t.UpVector);
+		if B:Dot(t.LookVector) < 0 and (math.abs(G) < 1 and math.abs(x) < 1) then
+			x = 1;
+		end;
+		local Q, k = v.X / 2, v.Y / 2;
+		local S = math.min(((Q - 40)) / math.max(math.abs(G), 1e-06), ((k - 40)) / math.max(math.abs(x), 1e-06));
+		J, q = Q + G * S, k + x * S;
+		M = 14;
+	end;
+	local b, P, O = Be.box, Be.outline, Be.label;
+	J, q, M = math.floor(J), math.floor(q), math.floor(M);
+	if Be.lastSize ~= M then
+		b.Size = Vector2.new(M, M);
+		P.Size = b.Size;
+		Be.lastSize, Be.lastX = M, nil;
+	end;
+	if Be.lastX ~= J or Be.lastY ~= q then
+		b.Position = Vector2.new(J - M / 2, q - M / 2);
+		P.Position = b.Position;
+		O.Position = Vector2.new(J, (q + M / 2) + 4);
+		Be.lastX, Be.lastY = J, q;
+	end;
+	local Z = string.format("DIG %s  %d", Be.name or "", G);
+	if Be.lastText ~= Z then
+		O.Text, Be.lastText = Z, Z;
+	end;
+	if not Be.shown then
+		b.Visible, P.Visible, O.Visible = true, true, true;
+		Be.shown = true;
+	end;
+end;
+function Be.destroy()
+	local t = { Be.box, Be.outline, Be.label };
+	Be.box, Be.outline, Be.label, Be.shown = nil, nil, nil, false;
+	for t, o in ipairs(t) do
+		pcall(function()
+			o:Remove();
+		end);
+	end;
+end;
+local Qe;
+do
+	local buildUI = function()
+		local env=getfenv()
+		if env.GBSUI and env.GBSUI.Destroy then env.GBSUI:Destroy() end
+		assert(Drawing and Drawing.new,"UI requires the Matcha Drawing API")
+		local V,RGB=Vector2.new,Color3.fromRGB
+		local unpackArgs=table.unpack or unpack
+		local themes={
+		 {Name="Purple",Accent=RGB(184,156,255),Text=RGB(239,230,255),Muted=RGB(185,169,213),Base=RGB(13,12,20)},
+		 {Name="Green",Accent=RGB(114,230,173),Text=RGB(224,255,239),Muted=RGB(153,200,178),Base=RGB(10,17,16)},
+		 {Name="Blue",Accent=RGB(124,185,255),Text=RGB(226,240,255),Muted=RGB(161,187,216),Base=RGB(11,15,23)},
+		 {Name="Black",Accent=RGB(208,211,223),Text=RGB(242,243,248),Muted=RGB(169,172,187),Base=RGB(8,9,13)}
+		}
+		local black,white=RGB(0,0,0),RGB(255,255,255)
+		local function clamp(n,a,b) return math.max(a,math.min(b,n)) end
+		local function mix(a,b,t) return Color3.new(a.R+(b.R-a.R)*t,a.G+(b.G-a.G)*t,a.B+(b.B-a.B)*t) end
+		local function short(s,n) s=tostring(s or "");return #s>n and s:sub(1,n-3).."..." or s end
+		local app={StartupSound=true,Effects=true,ReducedMotion=false,EffectStrength=0.8,Alive=true,Tabs={},Theme="Purple",Keybind=0xA1,Visible=true}
+		env.GBSUI=app
+		local run=game:GetService("RunService")
+		local workspace=game:GetService("Workspace")
+		local mouse=game:GetService("Players").LocalPlayer:GetMouse()
+		local pool,animations,notices={},{open=0},{}
+		local sequence,frame,connection=0,0,nil
+		local x,y,S,W,H=100,100,1,800,450
+		local a,contentA,dt,last=0,1,0,tick()
+		local mx,my,down,click,active=0,0,false,false,true
+		local previousDown,previousKey=false,false
+		local drag,slide,popup,capture=nil,nil,nil,nil
+		local tabOffset,selected=0,nil
+		local sidebarOpen,sidebarWidth,contentLeft=0,66,99
+		local sidebarLeaveTime=0
+		local closeConfirm=false
+		local closeConfirmClosing=false
+		local closingStarted=nil
+		local closeCenterX,closeCenterY,closeBaseS=nil,nil,nil
+		local CLOSE_DURATION=1.28
+		animations.sidebar=0
+		local targetTheme=1
+		local tint,ink,muted,accent=themes[1].Base,themes[1].Text,themes[1].Muted,themes[1].Accent
+		local introStart,introDone,introChimed,introSound=nil,false,false,nil
+		local motionClock,visitTime=0,0
+		local pulsePoints={}
+		local function uid() sequence=sequence+1;return "r"..sequence end
+		local function ease(id,target,rate)
+		 local v=animations[id];if v==nil then v=target end
+		 v=app.ReducedMotion and target or v+(target-v)*(1-math.exp(-dt*(rate or 14)));animations[id]=v;return v
+		end
+		local function obj(id,kind)
+		 local e=pool[id]
+		 if not e then
+		  local raw=Drawing.new(kind)
+		  local cache={}
+		  local d=setmetatable({}, {
+		   __index=function(_,key)
+		    if key=="Remove" then return function() raw:Remove() end end
+		    return cache[key]
+		   end,
+		   __newindex=function(_,key,value)
+		    if cache[key]~=value then raw[key]=value;cache[key]=value end
+		   end
+		  })
+		  e={d=d};pool[id]=e
+		  if kind=="Square" then d.Filled=true elseif kind=="Text" then d.Outline=false end
+		 end
+		 e.frame=frame;return e.d
+		end
+		local function rect(id,px,py,w,h,c,alpha,r,z)
+		 local d=obj(id,"Square");d.Position=V(px,py);d.Size=V(math.max(0,w),math.max(0,h));d.Color=c
+		 d.Transparency=clamp(alpha,0,1);d.Corner=r or 0;d.ZIndex=z or 20;d.Visible=alpha>0.005 and w>0 and h>0
+		end
+		local function txt(id,value,px,py,size,c,alpha,bold,z)
+		 local d=obj(id,"Text");d.Text=tostring(value);d.Position=V(px,py);d.Size=math.floor(size+0.5)
+		 d.Font=bold and Drawing.Fonts.SystemBold or Drawing.Fonts.System
+		 d.Color=c;d.Transparency=clamp(alpha,0,1);d.ZIndex=z or 40;d.Visible=alpha>0.005
+		end
+		local function box(id,px,py,w,h,c,opacity,r,z) rect(id,x+px*S,y+py*S,w*S,h*S,c,a*opacity,(r or 10)*S,z) end
+		local function label(id,value,px,py,size,c,opacity,bold,z) txt(id,value,x+px*S,y+py*S,size*S,c,a*(opacity or 1),bold,z) end
+		local function line(id,x1,y1,x2,y2,c,opacity,z,thickness)
+		 local d=obj(id,"Line");d.From=V(x+x1*S,y+y1*S);d.To=V(x+x2*S,y+y2*S)
+		 d.Thickness=math.max(1,(thickness or 1.65)*S);d.Color=c;d.Transparency=a*opacity;d.ZIndex=z or 45;d.Visible=a*opacity>0.005
+		end
+		local paths={
+		 brand={{2,10,10,1},{10,1,18,10},{18,10,10,19},{10,19,2,10},{6,10,10,5},{10,5,14,10},{14,10,10,15},{10,15,6,10}},
+		 spark={{10,1,12,8},{12,8,19,10},{19,10,12,12},{12,12,10,19},{10,19,8,12},{8,12,1,10},{1,10,8,8},{8,8,10,1}},
+		 layers={{2,6,10,2},{10,2,18,6},{18,6,10,10},{10,10,2,6},{2,10,10,14},{10,14,18,10},{2,14,10,18},{10,18,18,14}},
+		 bolt={{11,1,3,11},{3,11,9,11},{9,11,8,19},{8,19,17,8},{17,8,11,8},{11,8,11,1}},
+		 shield={{3,3,10,1},{10,1,17,3},{17,3,16,12},{16,12,10,19},{10,19,4,12},{4,12,3,3},{7,9,9,12},{9,12,14,6}},
+		 palette={{3,4,17,4},{17,4,17,16},{17,16,3,16},{3,16,3,4},{7,4,7,16},{12,4,12,16}},
+		 power={{10,1,10,10},{5,4,2,8},{2,8,2,14},{2,14,6,18},{6,18,14,18},{14,18,18,14},{18,14,18,8},{18,8,15,4}},
+		 sliders={{2,5,6,5},{10,5,18,5},{6,2,6,8},{10,2,10,8},{6,2,10,2},{6,8,10,8},{2,15,11,15},{15,15,18,15},{11,12,15,12},{11,18,15,18},{11,12,11,18},{15,12,15,18}},
+		 home={{1,9,10,1},{10,1,19,9},{3,8,3,18},{3,18,8,18},{8,18,8,12},{8,12,12,12},{12,12,12,18},{12,18,17,18},{17,18,17,8},{13,3,13,1},{13,1,16,1},{16,1,16,6},{6,8,8,8}},
+		 close={{5,5,15,15},{15,5,5,15}},
+		 script={{6,4,2,10},{2,10,6,16},{14,4,18,10},{18,10,14,16},{12,3,8,17}},
+		 down={{5,7,10,12},{10,12,15,7}},up={{5,12,10,7},{10,7,15,12}},
+		 left={{12,5,7,10},{7,10,12,15}},right={{7,5,12,10},{12,10,7,15}},
+		 check={{4,10,8,14},{8,14,16,5}},key={{3,6,17,6},{17,6,17,15},{17,15,3,15},{3,15,3,6},{6,10,7,10},{10,10,11,10},{13,10,14,10},{7,13,13,13}},
+		 info={{10,5,10,6},{10,9,10,15},{8,15,12,15}},
+		}
+		local gear={}
+		for i=0,11 do
+		 local t=i*math.pi/6;local u=(i+1)*math.pi/6
+		 gear[#gear+1]={10+math.cos(t)*7,10+math.sin(t)*7,10+math.cos(u)*7,10+math.sin(u)*7}
+		 if i%2==0 then gear[#gear+1]={10+math.cos(t)*7,10+math.sin(t)*7,10+math.cos(t)*10,10+math.sin(t)*10} end
+		end
+		for i=0,7 do local t=i*math.pi/4;local u=(i+1)*math.pi/4;gear[#gear+1]={10+math.cos(t)*2.5,10+math.sin(t)*2.5,10+math.cos(u)*2.5,10+math.sin(u)*2.5} end
+		paths.gear=gear
+		local function icon(id,name,px,py,c,opacity,z,angle,scale)
+		 local strokes=type(name)=="table" and name or paths[name] or paths.script
+		 local cs,sn=math.cos(angle or 0),math.sin(angle or 0);scale=scale or 1
+		 for i,p in ipairs(strokes) do
+		  local ax,ay,bx,by=(p[1]-10)*scale,(p[2]-10)*scale,(p[3]-10)*scale,(p[4]-10)*scale
+		  line(id..i,px+10+ax*cs-ay*sn,py+10+ax*sn+ay*cs,px+10+bx*cs-by*sn,py+10+bx*sn+by*cs,c,opacity,z)
+		 end
+		end
+		local function hit(px,py,w,h,modal)
+		 local normalAllowed=not closeConfirm and not closeConfirmClosing and not closingStarted
+		 return introDone and active and app.Visible and a>0.9 and not (popup and popup.Closing) and (modal or (normalAllowed and not popup and not capture)) and mx>=x+px*S and mx<=x+(px+w)*S and my>=y+py*S and my<=y+(py+h)*S
+		end
+		local function fire(fn,...)
+		 if type(fn)~="function" then return end
+		 local args={...}
+		 task.spawn(function()
+		  local ok,err=pcall(function() fn(unpackArgs(args)) end)
+		  if not ok and app.Alive then app:Notify({Title="Script error",Content=tostring(err),Type="error",Duration=6}) end
+		 end)
+		end
+		function app:Notify(options,message)
+		 if not self.Alive then return end
+		 if type(options)~="table" then options={Title=options,Content=message} end
+		 local n={id=uid(),title=short(options.Title or "GBS",32),message=short(options.Content or "",48),
+		  kind=options.Type or "info",duration=clamp(tonumber(options.Duration) or 4,1,20),time=tick()}
+		 notices[#notices+1]=n
+		 if #notices>4 then local old=table.remove(notices,1);animations[old.id.."y"]=nil end
+		 return n.id
+		end
+		function app:SetTheme(name)
+		 for i,t in ipairs(themes) do if string.lower(t.Name)==string.lower(tostring(name)) then targetTheme=i;self.Theme=t.Name;return true end end
+		 return false
+		end
+		local function keyName(k)
+		 local names={[0xA0]="Left Shift",[0xA1]="Right Shift",[0xA2]="Left Ctrl",[0xA3]="Right Ctrl",[0xA4]="Left Alt",[0xA5]="Right Alt",[0x2D]="Insert",[0x24]="Home",[0x23]="End",[0x20]="Space",[0x09]="Tab",[0x0D]="Enter",[0x2E]="Delete"}
+		 if names[k] then return names[k] end
+		 if k>=0x70 and k<=0x87 then return "F"..(k-0x6F) end
+		 if k>=0x30 and k<=0x5A then return string.char(k) end
+		 return string.format("Key 0x%02X",k)
+		end
+		function app:SetKeybind(vk)
+		 assert(type(vk)=="number" and vk>=8 and vk<=254 and vk==math.floor(vk) and vk~=27,"Use a VK key code (8..254), except Escape")
+		 self.Keybind=vk;previousKey=iskeypressed(vk)
+		end
+		function app:Destroy()
+		 if not self.Alive then return end
+		 self.Alive=false
+		 if connection then connection:Disconnect() end
+		 if introSound then pcall(function() introSound:Destroy() end);introSound=nil end
+		 for _,e in pairs(pool) do pcall(function() e.d:Remove() end) end
+		 pool={};notices={}
+		 if env.GBSUI==self then env.GBSUI=nil end
+		end
+		local function requestClose()
+		 if not app.Alive or closingStarted or closeConfirm or closeConfirmClosing then return end
+		 popup=nil;capture=nil;slide=nil;drag=nil
+		 closeConfirm=true;closeConfirmClosing=false
+		 animations.closeConfirm=0
+		end
+		local function cancelClose()
+		 if closeConfirm and not closingStarted then closeConfirmClosing=true end
+		end
+		local function beginCloseAnimation()
+		 if closingStarted or not app.Alive then return end
+		 closeConfirm=false;closeConfirmClosing=false
+		 popup=nil;capture=nil;slide=nil;drag=nil
+		 app.Visible=true
+		 closingStarted=tick()
+		 closeCenterX=x+W*S*.5;closeCenterY=y+H*S*.5;closeBaseS=S
+		end
+		function app:RequestClose() requestClose() end
+		local Tab={};Tab.__index=Tab
+		local Control={};Control.__index=Control
+		function Control:GetValue() return self.Value end
+		function Control:SetText(text) self.Title=short(text,52);return self end
+		function Control:SetValue(value,silent)
+		 if self.Kind=="toggle" then value=not not value
+		 elseif self.Kind=="slider" then value=clamp(tonumber(value) or self.Min,self.Min,self.Max);value=self.Min+math.floor((value-self.Min)/self.Step+0.5)*self.Step;value=clamp(value,self.Min,self.Max)
+		 elseif self.Kind=="dropdown" then
+		  local found=false;for _,item in ipairs(self.Options) do if item==value then found=true;break end end
+		  assert(found,"Dropdown value must be one of its Options")
+		 end
+		 local changed=self.Value~=value;self.Value=value
+		 if changed and not silent then fire(self.Callback,value) end
+		 return self
+		end
+		Control.Set=Control.SetValue
+		function Tab:_add(kind,o)
+		 assert(app.Alive,"UI has been destroyed")
+		 o=o or {};local c=setmetatable({Id=uid(),Kind=kind,Title=short(o.Title or kind,52),Description=short(o.Description or "",68),Callback=o.Callback},Control)
+		 c.Icon=o.Icon or ({button="bolt",toggle="power",slider="sliders",dropdown="layers",keybind="key",label="spark"})[kind]
+		 c.ButtonText=short(o.ButtonText or "Run",9);c.Custom=o.Custom
+		 c.Min=tonumber(o.Min) or 0;c.Max=tonumber(o.Max) or 100;c.Step=tonumber(o.Step) or 1
+		 if kind=="slider" then assert(c.Max>c.Min and c.Step>0,"Slider requires Max > Min and Step > 0") end
+		 c.Options=o.Options or {};if kind=="dropdown" then assert(#c.Options>0,"Dropdown requires Options") end
+		 c.Value=o.Default
+		 if kind=="toggle" then c.Value=not not o.Default elseif kind=="slider" then c:SetValue(o.Default or c.Min,true)
+		 elseif kind=="dropdown" then c:SetValue(o.Default or c.Options[1],true) end
+		 animations[c.Id.."appear"]=0
+		 self.Controls[#self.Controls+1]=c;return c
+		end
+		function Tab:AddButton(o) return self:_add("button",o) end
+		function Tab:AddToggle(o) return self:_add("toggle",o) end
+		function Tab:AddSlider(o) return self:_add("slider",o) end
+		function Tab:AddDropdown(o) return self:_add("dropdown",o) end
+		function Tab:AddLabel(o) if type(o)=="string" then o={Title=o} end;return self:_add("label",o) end
+		local function replayTab(tab)
+		 animations.content=0;contentA=0;visitTime=motionClock;popup=nil;slide=nil;capture=nil
+		 for _,c in ipairs(tab.Controls) do
+		  local id=c.Id
+		  animations[id.."appear"]=0
+		  animations[id.."hover"]=0;animations[id.."cardhover"]=0
+		  animations[id.."press"]=0;animations[id.."rotate"]=0;animations[id.."record"]=0
+		  if c.Kind=="toggle" then animations[id.."switch"]=0 end
+		  if c.Kind=="slider" then animations[id.."fill"]=0;animations[id.."number"]=c.Min end
+		 end
+		end
+		function Tab:Select()
+		 if selected~=self then selected=self;replayTab(self) end
+		 for i,t in ipairs(app.Tabs) do if t==self then tabOffset=clamp(tabOffset,math.max(0,i-5),i-1) end end
+		 return self
+		end
+		function app:AddTab(o)
+		 if type(o)=="string" then o={Title=o} end
+		 o=o or {};local tab=setmetatable({Id=uid(),Title=short(o.Title or "Tab",18),Icon=o.Icon or "script",Controls={},Page=1},Tab)
+		 animations[tab.Id.."appear"]=0
+		 self.Tabs[#self.Tabs+1]=tab;if not selected then selected=tab end;return tab
+		end
+		local home=app:AddTab({Title="Home",Icon="home"});app.Home=home
+		local settings=app:AddTab({Title="Settings",Icon="gear"});app.Settings=settings
+		home:AddLabel({Title="Welcome.",Icon="home"})
+		local themeControl=settings:AddDropdown({Title="Theme",Description="colors",Options={"Purple","Green","Blue","Black"},Default="Purple",Callback=function(v) app:SetTheme(v) end})
+		settings:_add("keybind",{Title="Menu keybind",Description="Click to record a key. Escape cancels."})
+		settings:AddButton({Title="Test notification",Description="Test.",Icon="info",ButtonText="Test",Callback=function()
+		 app:Notify({Title="Notification test",Content="it works.",Type="success",Duration=5})
+		end})
+		
+		local function glow(id,px,py,w,h,strength,z)
+		 if not app.Effects then return end
+		 for j=3,1,-1 do
+		  local spread=j*3
+		  box(id..j,px-spread,py-spread,w+spread*2,h+spread*2,accent,strength*app.EffectStrength*(4-j)*0.035,12+spread,z or 18)
+		 end
+		end
+		
+		local function smallButton(id,glyph,px,py,fn,modal,z)
+		 local over=hit(px,py,28,28,modal)
+		 box(id,px,py,28,28,ink,ease(id.."h",over and 0.16 or 0.045),8,z or 35)
+		 local hover=ease(id.."ink",over and 1 or 0)
+		 icon(id.."i",glyph,px+4,py+4-hover,mix(muted,accent,hover),1,(z or 35)+1,0,1+hover*.12)
+		 if over and click then click=false;fn() end
+		end
+		local function beginCapture(control)
+		 capture={keys={},control=control};popup=nil
+		 for k=8,254 do capture.keys[k]=iskeypressed(k) end
+		end
+		local function renderControl(c,py,index)
+		 local id=c.Id;local px=contentLeft;local width=761-px
+		 local enter=ease(id.."appear",(app.ReducedMotion or motionClock-visitTime>(index-1)*0.045) and 1 or 0,13)
+		 local contentA=contentA*enter
+		 py=py+(1-enter)*10
+		 local hovered=hit(px,py,width,65)
+		 local hover=ease(id.."cardhover",hovered and 1 or 0,14)
+		 local surface=mix(tint,white,0.035+hover*0.022)
+		 box(id.."border",px-hover,py-hover,width+hover*2,65+hover*2,mix(ink,accent,hover),(.065+hover*.13)*contentA,12,22)
+		 box(id.."card",px+1,py+1,width-2,63,surface,(.48+hover*.14)*contentA,11,23)
+		 box(id.."badge",px+13,py+17,31,31,accent,(.055+hover*.07)*contentA,9,25)
+		 icon(id.."customicon",c.Icon,px+18.5,py+22.5-hover*2,mix(muted,accent,hover),contentA,28,hover*.08,1+hover*.1)
+		 local right=c.Kind=="label" and 0 or 195
+		 label(id.."title",short(c.Title,right>0 and 28 or 52),px+57+hover*3,py+13,14,ink,contentA,true)
+		 label(id.."description",short(c.Description,right>0 and 38 or 66),px+57+hover*3,py+37,11,muted,contentA)
+		 if hovered and click and not app.ReducedMotion then
+		  pulsePoints[#pulsePoints+1]={x=clamp((mx-x)/S,px+10,px+width-10),y=clamp((my-y)/S,py+10,py+55),time=motionClock}
+		  if #pulsePoints>6 then table.remove(pulsePoints,1) end
+		 end
+		 if c.Kind=="button" then
+		  local over=hit(650,py+15,94,34)
+		  local pulse=ease(id.."press",0,9)
+		  box(id.."button",650+pulse*2,py+15+pulse,94-pulse*4,34-pulse*2,accent,(0.14+pulse*0.25+ease(id.."hover",over and 0.13 or 0))*contentA,9,30)
+		  label(id.."run",c.ButtonText,667,py+24,12,ink,contentA,true);icon(id.."arrow","right",717,py+22,accent,contentA)
+		  if over and click then click=false;animations[id.."press"]=1;fire(c.Callback) end
+		 elseif c.Kind=="toggle" then
+		  local v=ease(id.."switch",c.Value and 1 or 0)
+		  glow(id.."toggleGlow",699,py+25,38,16,v*contentA,29)
+		  box(id.."switch",695,py+21,46,24,mix(muted,accent,v),(0.16+v*0.5)*contentA,12,30)
+		  box(id.."knob",699+22*v,py+25,16,16,ink,contentA,8,31)
+		  if hit(680,py+12,65,42) and click then click=false;c:SetValue(not c.Value) end
+		 elseif c.Kind=="dropdown" then
+		  local over=hit(579,py+15,165,35)
+		  box(id.."select",579,py+15,165,35,ink,(0.055+ease(id.."hover",over and 0.065 or 0))*contentA,8,30)
+		  label(id.."value",short(c.Value,17),592,py+25,12,ink,contentA,true)
+		  local rotate=ease(id.."rotate",popup and popup.control==c and not popup.Closing and 1 or 0)
+		  line(id.."chevron1",724,py+30+5*rotate,729,py+35-5*rotate,accent,contentA)
+		  line(id.."chevron2",729,py+35-5*rotate,734,py+30+5*rotate,accent,contentA)
+		  if over and click then click=false;popup={control=c,x=579,y=math.min(py+53,H-186),offset=0};animations.dropdown=0 end
+		 elseif c.Kind=="keybind" then
+		  local mine=c.Custom and c or nil
+		  local recording=capture and capture.control==mine
+		  box(id.."key",579,py+15,165,35,accent,(0.07+ease(id.."record",recording and 0.16 or hit(579,py+15,165,35) and 0.06 or 0))*contentA,8,30)
+		  icon(id.."keyicon","key",588,py+22,accent,contentA)
+		  label(id.."value",recording and "Press a key..." or (mine and (c.Value and keyName(c.Value) or "None") or keyName(app.Keybind)),617,py+25,12,ink,contentA,true)
+		  if hit(579,py+15,165,35) and click then click=false;beginCapture(mine) end
+		 elseif c.Kind=="slider" then
+		  local sx,sw=584,156
+		  label(id.."value",string.format("%.2f",ease(id.."number",c.Value,18)):gsub("%.?0+$",""),680,py+8,11,accent,contentA,true)
+		  if hit(sx-6,py+26,sw+12,28) and click then slide=c;click=false end
+		  if slide==c and down and active and not popup and not capture then c:SetValue(c.Min+clamp((mx-x-sx*S)/(sw*S),0,1)*(c.Max-c.Min)) end
+		  local t=ease(id.."fill",(c.Value-c.Min)/(c.Max-c.Min))
+		  box(id.."track",sx,py+39,sw,3,ink,0.14*contentA,2,30)
+		  box(id.."fill",sx,py+39,sw*t,3,accent,contentA,2,31)
+		  glow(id.."sliderGlow",sx+sw*t-3,py+37,7,7,contentA,30)
+		  box(id.."thumb",sx+sw*t-5,py+35,11,11,ink,contentA,6,32)
+		 end
+		end
+		local function renderPopup()
+		 if not popup then return end
+		 local p=popup;local c=p.control;local reveal=ease("dropdown",p.Closing and 0 or 1,20);local py=p.y+(1-reveal)*-6
+		 if p.Closing and reveal<0.01 then popup=nil;return end
+		 local count=math.min(4,#c.Options-p.offset);local extra=#c.Options>4 and 29 or 0
+		 local height=count*32+12+extra
+		 box("dropdownshadow",p.x-4,py+3,173,height+5,black,.4*reveal,13,68)
+		 box("dropdownrim",p.x-1,py-1,167,height+2,accent,.25*reveal,11,69)
+		 box("dropdown",p.x,py,165,height,mix(tint,white,.045),reveal,10,70)
+		 for j=1,count do
+		  local value=c.Options[p.offset+j];local rowY=py+6+(j-1)*32
+		  local over=hit(p.x+5,rowY,155,30,true)
+		  local chosen=c.Value==value
+		  local hover=ease("optionmotion"..j,over and 1 or 0,16)
+		  box("optionrail"..j,p.x+6,rowY+8,2,14,accent,hover*reveal,1,72)
+		  box("option"..j,p.x+5,rowY,155,30,accent,ease("optionhover"..j,chosen and 0.22+hover*.08 or hover*.16)*reveal,7,71)
+		  label("optiontext"..j,short(value,17),p.x+12+hover*4,rowY+9,12,mix(chosen and accent or ink,accent,hover*.6),reveal,chosen,73)
+		  if chosen then icon("optioncheck"..j,"check",p.x+136,rowY+5,accent,reveal,73) end
+		  if over and click then click=false;c:SetValue(value);p.Closing=true;break end
+		 end
+		 if popup and extra>0 then
+		  smallButton("optionsprev","left",p.x+100,py+height-29,function() p.offset=math.max(0,p.offset-4) end,true,74)
+		  smallButton("optionsnext","right",p.x+130,py+height-29,function() p.offset=math.min(math.floor((#c.Options-1)/4)*4,p.offset+4) end,true,74)
+		 end
+		 if popup and click and not hit(p.x,py,165,height,true) then p.Closing=true;click=false end
+		end
+		local borderRadius=17
+		local borderHorizontal=W-2*borderRadius
+		local borderVertical=H-2*borderRadius
+		local borderArc=math.pi*borderRadius/2
+		local borderLength=2*borderHorizontal+2*borderVertical+4*borderArc
+		local function borderPoint(distance)
+		 local d=distance%borderLength;local r=borderRadius
+		 if d<borderHorizontal then return r+d,0 end;d=d-borderHorizontal
+		 if d<borderArc then local t=d/r-math.pi/2;return W-r+math.cos(t)*r,r+math.sin(t)*r end;d=d-borderArc
+		 if d<borderVertical then return W,r+d end;d=d-borderVertical
+		 if d<borderArc then local t=d/r;return W-r+math.cos(t)*r,H-r+math.sin(t)*r end;d=d-borderArc
+		 if d<borderHorizontal then return W-r-d,H end;d=d-borderHorizontal
+		 if d<borderArc then local t=d/r+math.pi/2;return r+math.cos(t)*r,H-r+math.sin(t)*r end;d=d-borderArc
+		 if d<borderVertical then return 0,H-r-d end;d=d-borderVertical
+		 local t=d/r+math.pi;return r+math.cos(t)*r,r+math.sin(t)*r
+		end
+		local function smooth(t) t=clamp(t,0,1);return t*t*t*(t*(t*6-15)+10) end
+		
+		local function renderCloseConfirm()
+		 if not closeConfirm and not closeConfirmClosing then return end
+		 local target=closeConfirmClosing and 0 or 1
+		 local reveal=ease("closeConfirm",target,closeConfirmClosing and 24 or 17)
+		 if closeConfirmClosing and reveal<0.015 then closeConfirm=false;closeConfirmClosing=false;return end
+		
+		 local pop=app.ReducedMotion and 1 or (.965+.035*smooth(reveal))
+		 local mw,mh=400*pop,188*pop
+		 local px,py=W*.5-mw*.5,H*.5-mh*.5
+		 local aa=reveal
+		
+		 
+		 box("closeConfirmDim",0,0,W,H,black,.24*aa,17,145)
+		 box("closeConfirmShadow",px-4,py+5,mw+8,mh+7,black,.16*aa,18,146)
+		 box("closeConfirmRim",px-1,py-1,mw+2,mh+2,mix(ink,accent,.22),.13*aa,17,147)
+		 box("closeConfirmPanel",px,py,mw,mh,mix(tint,black,.10),.72*aa,16,148)
+		
+		 box("closeConfirmBadge",px+24,py+21,37,37,accent,.095*aa,10,150)
+		 icon("closeConfirmIcon","close",px+31.5,py+28.5,accent,.92*aa,153,0,1.02)
+		 label("closeConfirmKicker","UNLOAD MENU",px+75,py+20,9,accent,.72*aa,true,153)
+		 label("closeConfirmTitle","Are you sure?",px+75,py+37,22,ink,.96*aa,true,153)
+		 label("closeConfirmBody","This will completely unload the menu.",px+25,py+75,11,muted,.78*aa,false,153)
+		 box("closeConfirmRule",px+25,py+103,mw-50,1,ink,.055*aa,0,150)
+		
+		 local by=py+119
+		 local gap=10
+		 local bw=(mw-50-gap)*.5
+		 local bh=43
+		 local noX=px+25
+		 local yesX=noX+bw+gap
+		 local noOver=hit(noX,by,bw,bh,true)
+		 local yesOver=hit(yesX,by,bw,bh,true)
+		 local nh=ease("closeNoHover",noOver and 1 or 0,18)
+		 local yh=ease("closeYesHover",yesOver and 1 or 0,18)
+		
+		
+		 box("closeNo",noX,by,bw,bh,mix(tint,white,.025),(.30+.08*nh)*aa,10,151)
+		 box("closeNoRail",noX,by+11,2,21,muted,.22*nh*aa,1,154)
+		 label("closeNoText","No, keep it",noX+41+nh*2,by+14,12,mix(ink,accent,nh*.18),.92*aa,true,154)
+		
+		 box("closeYesRim",yesX-1,by-1,bw+2,bh+2,accent,(.14+.13*yh)*aa,11,150)
+		 box("closeYes",yesX,by,bw,bh,accent,(.075+.10*yh)*aa,10,151)
+		 box("closeYesRail",yesX,by+11,2,21,accent,(.42+.28*yh)*aa,1,154)
+		 label("closeYesText","Yes, unload",yesX+37+yh*2,by+14,12,ink,.95*aa,true,154)
+		 icon("closeYesArrow","right",yesX+bw-30+yh*2,by+11,accent,.92*aa,155,0,.82+yh*.06)
+		
+		 if noOver and click then click=false;cancelClose() end
+		 if yesOver and click then click=false;beginCloseAnimation() end
+		end
+		
+		local function renderCloseEffects(now)
+		 if not closingStarted then return false end
+		 local elapsed=now-closingStarted
+		 local duration=app.ReducedMotion and .42 or CLOSE_DURATION
+		 local cx,cy=closeCenterX or (x+W*S*.5),closeCenterY or (y+H*S*.5)
+		 local bs=closeBaseS or S
+		 if not app.ReducedMotion then
+		  local gather=smooth((elapsed-.10)/.72)
+		  for j=1,20 do
+		   local angle=j*2.399963229728653
+		   local radius=(1-gather)*(116+(j%5)*24)*bs
+		   local wobble=math.sin(elapsed*14+j)*3*bs*(1-gather)
+		   local px=cx+math.cos(angle)*radius+wobble
+		   local py=cy+math.sin(angle)*radius*.55-wobble*.35
+		   local sz=(j%3==0 and 3 or 2)*math.max(.65,bs)
+		   rect("closeShard"..j,px-sz*.5,py-sz*.5,sz,sz,accent,(1-gather)*.72,0,171)
+		  end
+		  local scan=smooth((elapsed-.08)/.55)
+		  for j=1,5 do
+		   local offset=(1-scan)*(70+j*19)*bs
+		   local yy=cy+((j%2==0) and offset or -offset)
+		   local width=(150+j*38)*bs*(1-scan*.35)
+		   rect("closeScan"..j,cx-width*.5,yy,width,math.max(1,1.2*bs),j%2==0 and ink or accent,(1-scan)*(.14+j*.035),0,169)
+		  end
+		 end
+		 local lineIn=smooth((elapsed-.44)/(duration*.38))
+		 local lineOut=smooth((elapsed-duration*.80)/(duration*.20))
+		 local lineW=math.max(0,230*bs*lineIn*(1-lineOut))
+		 if lineW>0.5 then
+		  rect("closeCoreGlow",cx-lineW*.5-5*bs,cy-3*bs,lineW+10*bs,6*bs,accent,.10*(1-lineOut),3*bs,173)
+		  rect("closeCore",cx-lineW*.5,cy-math.max(.5,bs*.65),lineW,math.max(1,1.3*bs),accent,.90*(1-lineOut),1,174)
+		 end
+		 local wordA=(1-smooth((elapsed-duration*.58)/(duration*.22)))*smooth(elapsed/(duration*.16))
+		 if wordA>.01 then txt("closeWord","GBS",cx-18*bs,cy-27*bs,16*bs,ink,wordA,true,175) end
+		 if elapsed>=duration then app:Destroy();return true end
+		 return false
+		end
+		local function renderIntro(now,vp)
+		 if introDone then return end
+		 if not introStart then introStart=now end
+		 local elapsed=now-introStart
+		 if app.ReducedMotion then elapsed=3.3 end
+		 if elapsed>=3.3 then
+		  introDone=true;animations.content=0;visitTime=motionClock
+		  for id,e in pairs(pool) do
+		   if id:sub(1,6)=="intro:" then pcall(function() e.d:Remove() end);pool[id]=nil end
+		  end
+		  if introSound then pcall(function() introSound:Destroy() end);introSound=nil end
+		  return
+		 end
+		 if elapsed>=.90 and not introChimed then
+		  introChimed=true
+		  if app.StartupSound then task.spawn(function()
+		   if not app.Alive or introDone then return end
+		   pcall(function()
+		    if not Instance or type(Instance.new)~="function" then return end
+		    local sound=Instance.new("Sound");introSound=sound
+		    sound.SoundId="rbxasset://sounds/electronicpingshort.wav"
+		    sound.Volume=.12;sound.PlaybackSpeed=1.18
+		    sound.Parent=game:GetService("SoundService");sound:Play()
+		   end)
+		  end) end
+		 end
+		 local reveal=smooth(elapsed/.95)
+		 local slide=smooth((elapsed-1.08)/.85)
+		 local leave=smooth((elapsed-2.65)/.60)
+		 local opacity=reveal*(1-leave)
+		 local scale=math.min(1,(vp.X-24)/300,(vp.Y-24)/136)
+		 local cx,cy=vp.X/2,vp.Y/2+(1-reveal)*8-leave*8
+		 local function logoEase(t)
+		  t=clamp(t,0,1)
+		  local s=smooth(t)
+		  local overshoot=math.sin(t*math.pi)*(1-t)
+		  return s,overshoot
+		 end
+		
+		 local rT,rPop=logoEase((elapsed-1.28)/.34)
+		 local eT,ePop=logoEase((elapsed-1.39)/.34)
+		 local mT,mPop=logoEase((elapsed-1.50)/.34)
+		
+		 local wordX=cx-42*scale
+		 local wordY=cy-22*scale
+		
+		 local rFinal=wordX
+		 local eFinal=wordX+28*scale
+		 local mFinal=wordX+56*scale
+		
+		 local compressed=wordX+28*scale
+		
+		 local rX=compressed+(rFinal-compressed)*rT-rPop*2.2*scale
+		 local eX=compressed+(eFinal-compressed)*eT
+		 local mX=compressed+(mFinal-compressed)*mT+mPop*2.2*scale
+		
+		 local rY=wordY+(1-rT)*6*scale-rPop*1.4*scale
+		 local eY=wordY+(1-eT)*6*scale-ePop*1.4*scale
+		 local mY=wordY+(1-mT)*6*scale-mPop*1.4*scale
+		
+		 txt("intro:echo:r","G",rX-2*scale,rY+1*scale,40*scale,white,opacity*rT*(1-rT)*.20,true,116)
+		 txt("intro:echo:e","B",eX-2*scale,eY+1*scale,40*scale,white,opacity*eT*(1-eT)*.20,true,116)
+		 txt("intro:echo:m","S",mX-2*scale,mY+1*scale,40*scale,white,opacity*mT*(1-mT)*.20,true,116)
+		
+		 txt("intro:letter:r","G",rX,rY,40*scale,white,opacity*rT,true,117)
+		 txt("intro:letter:e","B",eX,eY,40*scale,white,opacity*eT,true,117)
+		 txt("intro:letter:m","S",mX,mY,40*scale,white,opacity*mT,true,117)
+		
+		 local lock=smooth((elapsed-1.64)/.34)
+		 local sweepW=84*scale*lock
+		 rect("intro:logoSweep",
+		  wordX,
+		  wordY+42*scale,
+		  sweepW,
+		  math.max(1,1.15*scale),
+		  white,
+		  opacity*(1-lock)*.34,
+		  1,
+		  116)
+		
+		end
+		local function render()
+		 local now=tick();dt=clamp(now-last,0,0.1);last=now;frame=frame+1
+		 if not app.ReducedMotion then motionClock=motionClock+dt end
+		 active=type(isrbxactive)~="function" or isrbxactive()
+		 down=active and ismouse1pressed() and not (app.InputGuard and app.InputGuard());click=down and not previousDown;previousDown=down
+		 mx,my=mouse.X,mouse.Y
+		 if not down then drag=nil;slide=nil end
+		 local wasCapture=capture~=nil
+		 if capture and active then
+		  for k=8,254 do
+		   local held=iskeypressed(k)
+		   if held and not capture.keys[k] and k~=16 and k~=17 and k~=18 then
+		    if k~=27 then
+		     if capture.control then capture.control:SetValue(k) else app:SetKeybind(k) end
+		    end
+		    capture=nil;break
+		   end
+		   capture.keys[k]=held
+		  end
+		 end
+		 local key=active and iskeypressed(app.Keybind)
+		 if key and not previousKey and not wasCapture and introDone and not closeConfirm and not closeConfirmClosing and not closingStarted then app.Visible=not app.Visible;popup=nil;capture=nil end
+		 previousKey=key
+		 local camera=workspace.CurrentCamera;local vp=camera and camera.ViewportSize or V(1280,720)
+		 renderIntro(now,vp)
+		 S=math.max(0.2,math.min(1,(vp.X-24)/W,(vp.Y-24)/H))
+		 if frame==1 then x=(vp.X-W*S)/2;y=(vp.Y-H*S)/2 end
+		 if click and not closeConfirm and not closeConfirmClosing and not closingStarted and hit(0,0,W-65,69) then drag={mx-x,my-y};click=false end
+		 if drag and down then x=mx-drag[1];y=my-drag[2] end
+		 x=clamp(x,8,math.max(8,vp.X-W*S-8));y=clamp(y,8,math.max(8,vp.Y-H*S-8))
+		 a=ease("open",app.Visible and (introDone or (introStart and now-introStart>=2.98)) and 1 or 0,13);contentA=ease("content",1,15)
+		 if closingStarted then
+		  local elapsed=now-closingStarted
+		  local duration=app.ReducedMotion and .42 or CLOSE_DURATION
+		  local compress=smooth((elapsed-duration*.17)/(duration*.68))
+		  local fade=smooth((elapsed-duration*.45)/(duration*.45))
+		  local pulse=app.ReducedMotion and 0 or math.sin(clamp(elapsed/(duration*.18),0,1)*math.pi)*.012
+		  local scaleMul=math.max(.035,1+pulse-compress*.945)
+		  S=(closeBaseS or S)*scaleMul
+		  x=(closeCenterX or (x+W*S*.5))-W*S*.5
+		  y=(closeCenterY or (y+H*S*.5))-H*S*.5
+		  a=a*(1-fade);contentA=contentA*(1-fade)
+		 end
+		 local b=1-math.exp(-dt*9);local theme=themes[targetTheme]
+		 tint=mix(tint,theme.Base,b);ink=mix(ink,theme.Text,b);muted=mix(muted,theme.Muted,b);accent=mix(accent,theme.Accent,b)
+		 themeControl.Value=app.Theme
+		 local restY=y;y=y+(1-a)*15*S
+		 local sidebarOver=hit(10,10,sidebarWidth,H-20) and not slide and not drag
+		 if sidebarOver then sidebarLeaveTime=now end
+		 local expand=sidebarOver or (sidebarOpen>.01 and now-sidebarLeaveTime<.12)
+		 sidebarOpen=ease("sidebar",expand and 1 or 0,expand and 14 or 12)
+		 sidebarWidth=66+108*sidebarOpen;contentLeft=99+108*sidebarOpen
+		 local sidebarText=clamp((sidebarOpen-.60)/.40,0,1)
+		 local navWidth=43+108*sidebarOpen
+		 if a>0.005 then
+		  for j=4,1,-1 do box("shadow"..j,-j*4,j*2,W+j*8,H+j*4,black,.035,18+j*4,4+j) end
+		  box("rim",-1,-1,W+2,H+2,ink,0.13,18,9)
+		  box("base",0,0,W,H,tint,.68,17,10)
+		  box("tint",0,0,W,H,tint,0.12,17,12)
+		  if app.Effects then
+		   local strength=app.EffectStrength
+		   for j=1,14 do
+		    local px=200+((j*139.7+motionClock*(3+j%3))%570)
+		    local py=84+((j*71.1-motionClock*(2+j%4))%326)
+		    local flicker=.12+.16*(.5+.5*math.sin(motionClock*1.2+j*2))
+		    box("dust"..j,px,py,j%3==0 and 2 or 1.2,j%3==0 and 2 or 1.2,accent,flicker*strength,1,14)
+		   end
+		   local head=motionClock*190
+		   for j=1,28 do
+		    local px,py=borderPoint(head-(j-1)*5)
+		    local qx,qy=borderPoint(head-j*5)
+		    local fade=(1-(j-1)/28)^2
+		    local id="lightTrail"..j
+		    line(id.."soft",px,py,qx,qy,accent,fade*.45*strength,18,8)
+		    line(id,px,py,qx,qy,accent,fade*1.95*strength,19,2.5)
+		   end
+		  end
+		  box("sidebar",10,10,sidebarWidth,H-20,mix(tint,black,.24),.58,12,15)
+		  box("sidebarRule",10+sidebarWidth,25,1,H-50,ink,.06,0,16)
+		  box("brandBadge",25,25,35,35,accent,.12,10,20)
+		  glow("brandHalo",30,30,25,25,.8,18)
+		  icon("brandMark","brand",32.5,32.5,accent,1,42)
+		  label("brand","GBS",70,25,27,ink,sidebarText,true)
+		
+		  box("headerRule",contentLeft,78,761-contentLeft,1,ink,.075,0,20)
+		  label("sectionSub",selected==home and "" or selected==settings and "" or "",contentLeft+1,59,11,muted,contentA)
+		
+		  for i=1,math.min(5,#app.Tabs-tabOffset) do
+		   local tab=app.Tabs[i+tabOffset];local enter=ease(tab.Id.."appear",1,11);local py=101+(i-1)*53+(1-enter)*9
+		   local over=hit(21,py,navWidth,43)
+		   local weight=ease(tab.Id.."selected",selected==tab and 1 or 0,15)
+		   local hover=ease(tab.Id.."hover",over and 1 or 0,14)
+		   box(tab.Id.."nav",21,py,navWidth,43,accent,(weight*.16+hover*.09)*enter,10,21)
+		   box(tab.Id.."rail",21,py+12,2,19,accent,weight*enter,1,24)
+		   icon(tab.Id.."icon",tab.Icon,33+hover*2,py+11-hover*2,mix(muted,accent,math.max(weight,hover)),enter,45,tab.Icon=="gear" and (weight*.35+hover*.4) or hover*.035,1+hover*.12)
+		   label(tab.Id.."name",short(tab.Title,math.max(4,math.floor((navWidth-48)/7))),64+hover*4,py+15,13,mix(muted,ink,weight),enter*sidebarText,selected==tab)
+		   if over and click then click=false;tab:Select() end
+		  end
+		  if #app.Tabs>5 then
+		   smallButton("tabsprev","up",29+16*sidebarOpen,350+24*sidebarOpen,function() tabOffset=math.max(0,tabOffset-1) end)
+		   smallButton("tabsnext","down",29+87*sidebarOpen,381-7*sidebarOpen,function() tabOffset=math.min(#app.Tabs-5,tabOffset+1) end)
+		  end
+		  box("keyhintBg",24,413,44+104*sidebarOpen,22,ink,.04,6,20)
+		  icon("keyhintIcon","key",29,414,muted,.7,42,0,.65)
+		  label("keyhint",string.upper(keyName(app.Keybind)),56,420,9,muted,0.9*sidebarText,true)
+		  label("title",selected.Title,contentLeft,29,25,ink,contentA,true)
+		  smallButton("close","close",752,23,requestClose)
+		  local pages=math.max(1,math.ceil(#selected.Controls/4));selected.Page=clamp(selected.Page,1,pages)
+		  if selected==home and #home.Controls==1 then
+		   local ca=contentA
+		   local bob=app.ReducedMotion and 0 or math.sin(motionClock*1.5)*2
+		   local enter=1-contentA
+		   glow("welcomeHalo",contentLeft+35,220+bob,28,28,.65*ca,24)
+		   icon("welcomeHouse","home",contentLeft+39,224+bob+enter*10,accent,ca,43,0,2.5)
+		   label("welcomeText","Welcome.",contentLeft+97,211+enter*12,34,ink,ca,true)
+		
+		  else
+		  for i=1,4 do local c=selected.Controls[(selected.Page-1)*4+i];if c then renderControl(c,99+(i-1)*77,i);if not app.Alive then return end end end
+		  end
+		  if pages>1 then
+		   label("pagenumber",selected.Page.." / "..pages,632,421,11,muted,1)
+		   smallButton("prevpage","left",681,410,function() selected.Page=math.max(1,selected.Page-1);replayTab(selected) end)
+		   smallButton("nextpage","right",719,410,function() selected.Page=math.min(pages,selected.Page+1);replayTab(selected) end)
+		  end
+		  for i=#pulsePoints,1,-1 do
+		   local p=pulsePoints[i];local age=motionClock-p.time
+		   if age>.45 or app.ReducedMotion then table.remove(pulsePoints,i)
+		   elseif app.Effects then
+		    for k=0,3 do
+		     local angle=k*math.pi/2+.785;local radius=4+age*23
+		     line("tap"..i.."_"..k,p.x+math.cos(angle)*radius,p.y+math.sin(angle)*radius,p.x+math.cos(angle)*(radius+3),p.y+math.sin(angle)*(radius+3),accent,(1-age/.45)*.65*app.EffectStrength,48)
+		    end
+		   end
+		  end
+		  if not closeConfirm and not closeConfirmClosing and not closingStarted then renderPopup() end
+		  renderCloseConfirm()
+		  if not app.Alive then return end
+		 end
+		 if renderCloseEffects(now) then return end
+		 y=restY
+		 for i=#notices,1,-1 do if now-notices[i].time>notices[i].duration+0.35 then animations[notices[i].id.."y"]=nil;table.remove(notices,i) end end
+		 for i,n in ipairs(notices) do
+		  local elapsed=now-n.time;local enter=app.ReducedMotion and 1 or clamp(elapsed/0.38,0,1);enter=1-(1-enter)^3
+		  local leave=clamp((elapsed-n.duration)/0.35,0,1);local opacity=enter*(1-leave*leave)
+		  local tx=18-(1-opacity)*340;local ty=ease(n.id.."y",18+(i-1)*80,13)
+		  local id="notice"..i;local c=accent
+		  local statusColor=n.kind=="error" and RGB(255,143,163) or n.kind=="success" and RGB(115,230,174) or accent
+		  rect(id.."rim",tx-1,ty-1,332,70,c,.23*opacity,13,99)
+		  rect(id.."base",tx,ty,330,68,tint,0.98*opacity,12,100)
+		  rect(id.."progress",tx+12,ty+65,306*clamp(1-elapsed/n.duration,0,1),1.5,c,.65*opacity,1,104)
+		  rect(id.."badge",tx+13,ty+16,33,33,c,0.17*opacity,9,101)
+		  txt(id.."title",n.title,tx+59,ty+14,14,ink,opacity,true,103)
+		  txt(id.."body",n.message,tx+59,ty+39,11,muted,opacity,false,103)
+		  local strokes=paths[n.kind=="success" and "check" or n.kind=="error" and "close" or "info"]
+		  for j,p in ipairs(strokes) do
+		   local d=obj(id.."icon"..j,"Line");d.From=V(tx+20+p[1],ty+22+p[2]);d.To=V(tx+20+p[3],ty+22+p[4]);d.Thickness=1.6
+		   d.Color=c;d.Transparency=opacity;d.ZIndex=103;d.Visible=true
+		  end
+		 end
+		 for _,e in pairs(pool) do if e.frame~=frame then e.d.Visible=false end end
+		end
+		connection=run.RenderStepped:Connect(function()
+		 if not app.Alive then return end
+		 local ok,err=pcall(render)
+		 if not ok then warn("UI stopped: "..tostring(err));app:Destroy() end
+		end)
+		 return app
+	end;
+	local ok, res = pcall(buildUI);
+	if ok then
+		Qe = res;
+	else
+		warn("GBS UI failed to load: " .. tostring(res));
+	end;
+end;
+local ee = { win = nil };
+function G.setMining(t)
+	t = t and true or false;
+	if w.running == t then
+		return;
+	end;
+	w.running = t;
+	g.releaseAll();
+	w.triggerAt = 0;
+	X.reset(w.timer);
+	w.lastEvent = tostring(i("QTEEvent") or "");
+	w.setPhase("IDLE", k());
+	w.status = t and "starting" or "idle";
+	if t and (x.pickKey and x.autoEquipPick) then
+		eq.ensure("pick", x.pickKey);
+		w.setPhase("COOLDOWN", k() + 800);
+	end;
+	if t then
+		L(false);
+		if ee.toggle then
+			pcall(function()
+				ee.toggle:Set(false, true);
+			end);
+		end;
+	end;
+	if ee.mineToggle then
+		pcall(function()
+			ee.mineToggle:Set(t, true);
+		end);
+	end;
+	if t and G.setFarm then
+		G.setFarm(false);
+	end;
+end;
+function G.setFarm(t)
+	t = t and true or false;
+	if m.running == t then
+		return;
+	end;
+	m.running = t;
+	m.releaseAll();
+	m.target, m.blacklist, m.lastPos = nil, {}, nil;
+	m.params, m.paramsFor = nil, nil;
+	m.octant, m.strafeUntil, m.follow, m.navX, m.navBest = nil, 0, nil, nil, nil;
+	m.status = t and "starting" or "idle";
+	if t then
+		L(false);
+		if ee.toggle then
+			pcall(function()
+				ee.toggle:Set(false, true);
+			end);
+		end;
+		G.setMining(false);
+	end;
+	if ee.chickenToggle then
+		pcall(function()
+			ee.chickenToggle:Set(t, true);
+		end);
+	end;
+end;
+	if Qe then
+		local ui = Qe;
+		ee.ui = ui;
+		local saved = eq.saved or {};
+		function G.flushSettings()
+			pcall(function()
+				writefile(eq.file, game:GetService("HttpService"):JSONEncode({
+					menuKey = ui.Keybind,
+					theme = ui.Theme,
+					castPct = x.castPct,
+					freezeFish = x.freezeFish,
+					autoEquipRod = x.autoEquipRod and true or false,
+					autoEquipPick = x.autoEquipPick and true or false,
+					rodKey = x.rodKey,
+					pickKey = x.pickKey,
+					weaponKey = x.weaponKey,
+					fightMobs = x.fightMobs and true or false,
+					fightReturn = x.fightReturn and true or false,
+					fightRange = x.fightRange,
+					espFruits = F.fruits and true or false,
+					espChests = F.chests and true or false,
+					espTreasure = Be.on and true or false,
+				}));
+			end);
+		end;
+		function G.saveSettings()
+			if G.savePending or G.dead then
+				return;
+			end;
+			G.savePending = true;
+			task.spawn(function()
+				task.wait(.4);
+				G.savePending = false;
+				if not G.dead then
+					G.flushSettings();
+				end;
+			end);
+		end;
+		F.fruits = saved.espFruits == true;
+		F.chests = saved.espChests == true;
+		Be.on = saved.espTreasure == true;
+		F.scanAt, Be.readAt = 0, 0;
+		pcall(function() ui:SetKeybind(type(saved.menuKey) == "number" and saved.menuKey or 35); end);
+		if type(saved.theme) == "string" then
+			pcall(function() ui:SetTheme(saved.theme); end);
+		end;
+		local origSetKeybind, origSetTheme = ui.SetKeybind, ui.SetTheme;
+		ui.SetKeybind = function(self, vk)
+			origSetKeybind(self, vk);
+			G.saveSettings();
+		end;
+		ui.SetTheme = function(self, name)
+			local ok = origSetTheme(self, name);
+			G.saveSettings();
+			return ok;
+		end;
+		ui.InputGuard = function()
+			return g.mouseHeld;
+		end;
+		local origDestroy = ui.Destroy;
+		ui.Destroy = function(self)
+			origDestroy(self);
+			if not G.dead then
+				G.unload();
+			end;
+		end;
+		local function slider(tab, flag, title, min, max, step, desc)
+			return tab:AddSlider({
+				Title = title,
+				Description = desc or "",
+				Min = min,
+				Max = max,
+				Step = step,
+				Default = x[flag],
+				Callback = function(t)
+					x[flag] = t;
+					G.saveSettings();
+				end,
+			});
+		end;
+		local fish = ui:AddTab({ Title = "Fish", Icon = "bolt" });
+		local mine = ui:AddTab({ Title = "Mine", Icon = "layers" });
+		local farm = ui:AddTab({ Title = "Farm", Icon = "shield" });
+		local esp = ui:AddTab({ Title = "ESP", Icon = "spark" });
+		local monster = ui:AddTab({ Title = "Monster", Icon = "power" });
+		monster:AddToggle({
+			Title = "Fight sea monsters",
+			Description = "While fishing, kill fishmen that show up",
+			Default = x.fightMobs,
+			Callback = function(t)
+				x.fightMobs = t;
+				G.saveSettings();
+			end,
+		});
+		monster:AddToggle({
+			Title = "Return to fishing spot",
+			Description = "TP back to where fishing started",
+			Default = x.fightReturn,
+			Callback = function(t)
+				x.fightReturn = t;
+				G.saveSettings();
+			end,
+		});
+		monster:_add("keybind", { Title = "Weapon slot", Description = "Click, then press the hotbar key", Custom = true, Default = x.weaponKey, Callback = function(k)
+					x.weaponKey = k;
+					G.saveSettings();
+				end });
+		slider(monster, "fightRange", "Detect range", 10, 300, 5, "How far away to notice a monster");
+		ee.toggle = fish:AddToggle({ Title = "Auto Fish", Description = "Hotkey: F1", Default = false, Callback = function(t)
+					L(t);
+				end });
+		fish:AddToggle({
+			Title = "Auto equip rod",
+			Description = "Equip the rod slot when Auto Fish starts",
+			Default = x.autoEquipRod and true or false,
+			Callback = function(t)
+				x.autoEquipRod = t;
+				G.saveSettings();
+			end,
+		});
+		ee.rodKey = fish:_add("keybind", { Title = "Rod slot", Description = "Click, then press the hotbar key", Custom = true, Default = x.rodKey, Callback = function(k)
+					x.rodKey = k;
+					G.saveSettings();
+				end });
+		slider(fish, "castPct", "Release at", 1, 100, 1, "Cast power release, in %");
+		fish:AddToggle({
+			Title = "Lock fish",
+			Description = "Freeze the fish while reeling",
+			Default = x.freezeFish,
+			Callback = function(t)
+				x.freezeFish = t;
+				G.saveSettings();
+			end,
+		});
+		ee.mineToggle = mine:AddToggle({ Title = "Auto Mine", Description = "Hotkey: F2", Default = false, Callback = function(t)
+					G.setMining(t);
+				end });
+		mine:AddToggle({
+			Title = "Auto equip pickaxe",
+			Description = "Equip the pickaxe slot when Auto Mine starts",
+			Default = x.autoEquipPick and true or false,
+			Callback = function(t)
+				x.autoEquipPick = t;
+				G.saveSettings();
+			end,
+		});
+		ee.pickKey = mine:_add("keybind", { Title = "Pickaxe slot", Description = "Click, then press the hotbar key", Custom = true, Default = x.pickKey, Callback = function(k)
+					x.pickKey = k;
+					G.saveSettings();
+				end });
+		ee.chickenToggle = farm:AddToggle({ Title = "Autofarm Chickens", Description = "Hotkey: F4", Default = false, Callback = function(t)
+					G.setFarm(t);
+				end });
+		esp:AddToggle({
+			Title = "Fruit ESP",
+			Description = "Highlight fruits in the world",
+			Default = F.fruits,
+			Callback = function(t)
+				F.fruits = t;
+				F.scanAt = 0;
+				G.saveSettings();
+			end,
+		});
+		esp:AddToggle({
+			Title = "Chest ESP",
+			Description = "Highlight chests in the world",
+			Default = F.chests,
+			Callback = function(t)
+				F.chests = t;
+				F.scanAt = 0;
+				G.saveSettings();
+			end,
+		});
+		esp:AddToggle({
+			Title = "Treasure map",
+			Description = "Mark the treasure map dig spot",
+			Default = Be.on,
+			Callback = function(t)
+				Be.on = t;
+				Be.readAt = 0;
+				G.saveSettings();
+			end,
+		});
+		ee.espCount = esp:AddLabel({ Title = "0 found", Description = "ESP targets currently detected", Icon = "info" });
+		local settingsTab = ui.Settings;
+		ui.Tabs = { fish, monster, mine, farm, esp, settingsTab };
+		fish:Select();
+	end;
+function G.unload()
+	if G.flushSettings then
+		pcall(G.flushSettings);
+	end;
+	G.dead = true;
+	K.running = false;
+	local t = G.conns;
+	G.conns = {};
+	for t, o in ipairs(t) do
+		pcall(function()
+			o:Disconnect();
+		end);
+	end;
+	local o = G.fastConn;
+	G.fastConn = nil;
+	if o then
+		pcall(function()
+			o:Disconnect();
+		end);
+	end;
+	m.running = false;
+	pcall(m.releaseAll);
+	g.releaseAll();
+	F.chests, F.fruits = false, false;
+	pcall(F.destroy);
+	Be.on = false;
+	pcall(Be.destroy);
+	local B = ee.ui;
+	ee.ui = nil;
+	if B then
+		pcall(function()
+			B:Destroy();
+		end);
+	end;
+end;
+do
+	local t, o, x = 0, 0, false;
+	local function S()
+		return K.running or w.running or m.running;
+	end;
+	local function r()
+		if G.dead then
+			return;
+		end;
+		local o = tick();
+		if o - t < ((S() and .004 or .014)) then
+			return;
+		end;
+		t = o;
+		if K.running then
+			local fought = false;
+			local fok, fres = pcall(fm.step, k());
+			if fok then
+				fought = fres and true or false;
+			else
+				fm.abort();
+				K.status = "monster error: " .. tostring(fres);
+			end;
+			if not fought then
+				local t, o = pcall(D);
+				if not t then
+					g.releaseAll();
+					K.status = "error: " .. tostring(o);
+				end;
+			end;
+		end;
+		if w.running then
+			local t, o = pcall(w.step, k());
+			if not t then
+				g.releaseAll();
+				w.status = "error: " .. tostring(o);
+			end;
+		end;
+		if m.running then
+			local t, o = pcall(m.step, k());
+			if not t then
+				m.releaseAll();
+				m.status = "error: " .. tostring(o);
+			end;
+		end;
+		local B, r = pcall(Be.step, k());
+		if not B then
+			Be.lastError = tostring(r);
+			Be.hide();
+		end;
+		local J, q = pcall(F.step, k());
+		if not J then
+			F.lastError = tostring(q);
+			F.hideFrom(1);
+		end;
+		if ee.toggle and ee.toggle.Value ~= (K.running and true or false) then
+			pcall(function()
+				ee.toggle:Set(K.running and true or false, true);
+			end);
+		end;
+		if ee.mineToggle and ee.mineToggle.Value ~= (w.running and true or false) then
+			pcall(function()
+				ee.mineToggle:Set(w.running and true or false, true);
+			end);
+		end;
+		if ee.chickenToggle and ee.chickenToggle.Value ~= (m.running and true or false) then
+			pcall(function()
+				ee.chickenToggle:Set(m.running and true or false, true);
+			end);
+		end;
+		if ee.espCount and F.count ~= ee.espShown then
+			ee.espShown = F.count;
+			pcall(function()
+				ee.espCount:SetText(string.format("%d found", F.count or 0));
+			end);
+		end;
+		if not ee.win then
+			local t, o = false, false;
+			pcall(function()
+				t = iskeypressed(Q) and true or false;
+				o = iskeypressed(e) and true or false;
+			end);
+			if t and not x then
+				L(not K.running);
+			end;
+			if o and not G.lastMineKey then
+				G.setMining(not w.running);
+			end;
+			local B = false;
+			pcall(function()
+				B = iskeypressed(v) and true or false;
+			end);
+			if B and not G.lastChickenKey then
+				G.setFarm(not m.running);
+			end;
+			x, G.lastMineKey, G.lastChickenKey = t, o, B;
+		end;
+	end;
+	G.conns[#G.conns + 1] = B.Heartbeat:Connect(function()
+			if G.dead then
+				return;
+			end;
+			local t = S();
+			if t and not G.fastConn then
+				G.fastConn = B.RenderStepped:Connect(r);
+			elseif not t and G.fastConn then
+				local t = G.fastConn;
+				G.fastConn = nil;
+				pcall(function()
+					t:Disconnect();
+				end);
+			end;
+			if not t then
+				r();
+			end;
+		end);
+end;
+G.GUI = q;
+G.S, G.CONFIG, G.SHAKE, G.REEL, G.MINE, G.FARM, G.ESP = K, x, T, a, w, m, F;
+G.TREASURE = Be;
+notify(Qe and "Loaded. F1 Fish, F2 Mine, F4 Chickens, END hides the menu.", 4);
