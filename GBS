@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.5";
+G.VERSION = "1.0.6";
 G.UPDATED = "2026-09-29";
-G.NOTE = "Faster shake, tighter cast, left-click reel";
+G.NOTE = "Fixed cast timing and shake click";
 pcall(function()
 	setrobloxinput(true);
 end);
@@ -25,10 +25,10 @@ local x = {
 		recastAfterReelMs = 1550,
 		castRepressMs = 250,
 		idleTimeoutMs = 20000,
-		clickHoldMs = 18,
-		clickGapMs = 6,
-		settleMs = 6,
-		stableMs = 8,
+		clickHoldMs = 35,
+		clickGapMs = 8,
+		settleMs = 12,
+		stableMs = 20,
 		maxAimFixes = 3,
 		reelInput = "Mouse",
 		freezeFish = true,
@@ -556,14 +556,14 @@ function c.step(t, o)
 	local e = math.max(.01, math.min(1, x.castPct / 100));
 	local v = { { lo = math.max(0, e - .01), hi = math.min(1, e + .01) } };
 	local k = false;
-	if X.observe(Q, B, t, v) then
+	if X.observe(Q, B, t, v) and Q.dir > 0 then
 		local pred = X.predict(Q, X.delay(Q), v);
-		local margin = math.max(.01, (Q.step or 0) / 2);
-		if pred and Q.dir > 0 and pred >= e - margin then
+		local band = math.max(.01, (Q.step or 0) / 2);
+		if pred and B >= e - .12 and math.abs(pred - e) <= band then
 			k = true;
 		end;
 	end;
-	if math.abs(B - e) <= .01 or B >= math.min(1, e + .01) then
+	if B >= e - .01 then
 		k = true;
 	end;
 	if k then
@@ -679,7 +679,7 @@ function T.step(t)
 		K.status = "shake: waiting for button";
 		return;
 	end;
-	local G = not T.target or math.abs(T.target.cx - o.cx) > 2 or math.abs(T.target.cy - o.cy) > 2;
+	local G = not T.target or math.abs(T.target.cx - o.cx) > 6 or math.abs(T.target.cy - o.cy) > 6;
 	if T.stage == "SEEK" or G then
 		if B and T.stage == "SEEK" then
 			K.misses = K.misses + 1;

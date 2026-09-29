@@ -2,6 +2,11 @@
 
 The current version is shown in the menu under Settings, and in the notification when the script loads.
 
+## 1.0.6 - 2026-09-29
+
+- Cast release: it could fire almost immediately (around 10%) when the estimate of the input delay was off. It now only releases when the bar is predicted to land within 1% of the target (about 97-99 for a target of 98), and never before the bar is within 12% of it.
+- Shake: the click sometimes never happened. The circle is given time to stop animating again (20 ms), it only re-aims if the circle moves more than 6 px, and the click is held for 35 ms so it can't be shorter than a frame.
+
 ## 1.0.5 - 2026-09-29
 
 - Removed the Reel and Monster tabs from 1.0.4. Fishfolk fights now happen automatically while Auto Fish is on (with return to the fishing spot). The only setting left for it is a Weapon slot key on the Fish tab.
@@ -23,6 +28,11 @@ The current version is shown in the menu under Settings, and in the notification
 ## 1.0.2 - 2026-09-29
 
 - Shake aiming no longer gets thrown off when the game reports the cursor position late (seen on a slower laptop at about 44 fps). It now waits for the reading to settle before trusting it, and undoes any correction that makes the aim worse.
+
+## 1.0.6 - 2026-09-29
+
+- Cast release: it could fire almost immediately (around 10%) when the estimate of the input delay was off. It now only releases when the bar is predicted to land within 1% of the target (about 97-99 for a target of 98), and never before the bar is within 12% of it.
+- Shake: the click sometimes never happened. The circle is given time to stop animating again (20 ms), it only re-aims if the circle moves more than 6 px, and the click is held for 35 ms so it can't be shorter than a frame.
 
 ## 1.0.5 - 2026-09-29
 
