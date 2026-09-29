@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.9";
+G.VERSION = "1.1.0";
 G.UPDATED = "2026-09-29";
-G.NOTE = "Shake waits for the game to see the cursor";
+G.NOTE = "Stronger Lock fish with tracking backup";
 pcall(function()
 	setrobloxinput(true);
 end);
@@ -762,6 +762,7 @@ function a.reset()
 	a.geo = nil;
 	a.safeAt, a.hovering = nil, false;
 	a.disc, a.geoFailAt = nil, nil;
+	a.lk, a.lkN, a.lkIn = nil, 0, 0;
 end;
 a.reset();
 local N = 2.0;
@@ -821,10 +822,10 @@ function a.pinFish(t, o, B, G, x, Q, e, v, k)
 			local q = memory_read("float", r + W);
 			if a.pinValid == nil then
 				local t = memory_read("float", S + Y);
-				local o = math.abs(t - ((x - B)) / ((G - Q))) < .03 and (math.abs(J - ((e - B)) / ((G - v))) < .03 and math.abs(q - v / G) < .02);
+				local o = math.abs(t - ((x - B)) / ((G - Q))) < .05 and (math.abs(J - ((e - B)) / ((G - v))) < .05 and math.abs(q - v / G) < .03);
 				if not o then
 					a.pinFails = ((a.pinFails or 0)) + 1;
-					if a.pinFails >= 15 then
+					if a.pinFails >= 40 then
 						a.pinValid = false;
 						local gg = _G.GrandBlueFishMine;
 						if gg and not gg.pinWarned then
@@ -842,9 +843,42 @@ function a.pinFish(t, o, B, G, x, Q, e, v, k)
 				b = J * ((1 - q)) + q / 2 < .5 and 1 or 0;
 			end;
 			memory_write("float", S + Y, math.max(0, math.min(1, b)));
+			a.lk = { fa = S, ma = r, M = M, t = tick() };
 			return true;
 		end);
 	return S and r == true;
+end;
+function a.lockTick()
+	local lk = a.lk;
+	if not lk then
+		return;
+	end;
+	if not x.freezeFish or K.phase ~= "REEL" or tick() - lk.t > .5 then
+		a.lk = nil;
+		return;
+	end;
+	pcall(function()
+		local J = memory_read("float", lk.ma + Y);
+		local sz = memory_read("float", lk.ma + W);
+		if type(J) ~= "number" or type(sz) ~= "number" or J ~= J or sz ~= sz or sz <= 0 or sz >= 1 then
+			return;
+		end;
+		local b = ((J * (1 - sz) + sz / 2) - lk.M / 2) / (1 - lk.M);
+		memory_write("float", lk.fa + Y, math.max(0, math.min(1, b)));
+	end);
+end;
+function a.ensureLoop()
+	if a.lockLoop then
+		return;
+	end;
+	a.lockLoop = true;
+	task.spawn(function()
+		while a.lk and not G.dead do
+			a.lockTick();
+			task.wait();
+		end;
+		a.lockLoop = false;
+	end);
 end;
 function a.locate(t, o, B, G, x, Q, e, v)
 	if a.disc == false or a.pinValid == true then
@@ -999,11 +1033,6 @@ function a.step(t)
 	end;
 	local Q = false;
 	local e = a.safeAt and (t < a.safeAt and string.format(", safe to finish in %.1fs", ((a.safeAt - t)) / 1000)) or "";
-	local v = a.geo;
-	if x.freezeFish and (a.pinValid == true and (v and (t - v.at < a.GEO_MS and a.pinFish(B, G, v.mx, v.mw, v.fx, v.fw, v.bx, v.bw, Q)))) then
-		a.frozen(e);
-		return;
-	end;
 	local k, J, q = V(o);
 	local M, b, P = V(B);
 	local O, Z, j = V(G);
@@ -1024,9 +1053,17 @@ function a.step(t)
 			bx = O,
 			bw = j,
 		};
-	if x.freezeFish and a.pinFish(B, G, k, q, M, P, O, j, Q) then
-		a.frozen(e);
-		return;
+	local locked = false;
+	if x.freezeFish then
+		locked = a.pinFish(B, G, k, q, M, P, O, j, Q) and true or false;
+		if locked then
+			a.ensureLoop();
+			local fc = M + P / 2;
+			a.lkN = (a.lkN or 0) + 1;
+			if fc >= O and fc <= O + j then
+				a.lkIn = (a.lkIn or 0) + 1;
+			end;
+		end;
 	end;
 	if x.freezeFish and a.pinValid ~= true and a.disc ~= false then
 		a.locate(B, G, k, q, M, P, O, j);
@@ -1099,7 +1136,7 @@ function a.step(t)
 		K.lastProgress = T;
 		K.reelProgressSeen = true;
 	end;
-	K.status = string.format("reeling %d%% tracking%s%s", math.floor(((K.lastProgress or 0)) * 100), a.pinValid == false and " (lock unavailable)" or "", e);
+	K.status = string.format("reeling %d%% %s%s", math.floor(((K.lastProgress or 0)) * 100), locked and "locked" or (a.pinValid == false and "tracking (lock unavailable)" or "tracking"), e);
 end;
 local function C()
 	T.reset();
@@ -1220,6 +1257,10 @@ end;
 G.setRunning = L;
 local function I(t)
 	a.setHold(false);
+	if (a.lkN or 0) >= 5 then
+		pcall(notify, string.format("Lock fish: on the fish %d%% of the reel", math.floor((a.lkIn or 0) / a.lkN * 100 + .5)), 3);
+	end;
+	a.lk = nil;
 	if ((K.lastProgress or 0)) >= .5 then
 		K.caught = K.caught + 1;
 	else
@@ -3451,6 +3492,9 @@ do
 		if G.dead then
 			return;
 		end;
+		if a.lk then
+			a.lockTick();
+		end;
 		local o = tick();
 		if o - t < ((S() and .004 or .014)) then
 			return;
@@ -3558,6 +3602,18 @@ do
 				r();
 			end;
 		end);
+	G.conns[#G.conns + 1] = B.Heartbeat:Connect(function()
+			if a.lk then
+				a.lockTick();
+			end;
+		end);
+	pcall(function()
+		G.conns[#G.conns + 1] = B.Stepped:Connect(function()
+				if a.lk then
+					a.lockTick();
+				end;
+			end);
+	end);
 end;
 G.GUI = q;
 G.S, G.CONFIG, G.SHAKE, G.REEL, G.MINE, G.FARM, G.ESP = K, x, T, a, w, m, F;

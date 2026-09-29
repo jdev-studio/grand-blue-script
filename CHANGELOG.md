@@ -2,6 +2,12 @@
 
 The current version is shown in the menu under Settings, and in the notification when the script loads.
 
+## 1.1.0 - 2026-09-29
+
+- Lock fish: the fish position was only written once per script update and the mouse was let go while locked, so when the game moved the fish in between, it slipped away and nothing brought the bar back. The position is now rewritten continuously (every render, physics and heartbeat step plus its own loop), and the bar keeps tracking the fish as a backup while locked.
+- The check that the lock offsets are right is less strict and gets 40 tries per reel instead of 15.
+- After each reel a notification shows how much of the reel the fish was on the bar.
+
 ## 1.0.9 - 2026-09-29
 
 - Shake: at low frame rates (around 20 fps) the click was sent before the game had registered the cursor over the button, so nothing happened. It now moves slightly off-centre and onto the button so the game always sees movement, and waits until the game's own cursor position is over the button before clicking (up to 0.25 s, then it clicks anyway).
@@ -44,6 +50,12 @@ The current version is shown in the menu under Settings, and in the notification
 ## 1.0.2 - 2026-09-29
 
 - Shake aiming no longer gets thrown off when the game reports the cursor position late (seen on a slower laptop at about 44 fps). It now waits for the reading to settle before trusting it, and undoes any correction that makes the aim worse.
+
+## 1.1.0 - 2026-09-29
+
+- Lock fish: the fish position was only written once per script update and the mouse was let go while locked, so when the game moved the fish in between, it slipped away and nothing brought the bar back. The position is now rewritten continuously (every render, physics and heartbeat step plus its own loop), and the bar keeps tracking the fish as a backup while locked.
+- The check that the lock offsets are right is less strict and gets 40 tries per reel instead of 15.
+- After each reel a notification shows how much of the reel the fish was on the bar.
 
 ## 1.0.9 - 2026-09-29
 
