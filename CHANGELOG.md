@@ -6,6 +6,11 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.0.6b - 2026-09-29
+
+- Performance: Matcha dropped to about 1 FPS while fishing. The 1.0.5c lock writer busy-looped for 10 ms between every yield, which starves an external executor. It's removed, along with the extra Stepped connection; the lock now writes from the main update and a single Heartbeat connection.
+- The main update runs at most 100 times a second while working and 20 when idle (was 250 and about 70), hotkeys are polled 20 times a second, the Fishfolk scan runs once a second and reads names before anything else, reel stats read the screen every 0.15 s, and the rod lookup at the start of a fight only searches the hotbar GUI.
+
 ## 1.0.6 - 2026-09-29
 
 - Fishfolk fights now carry on until the Fishfolk is dead (removed, marked Dead or at 0 health), with a 3 minute safety limit. They used the chicken farm's give-up rule, which ended the fight after 6 seconds without getting closer and then restarted it 30 seconds later.
