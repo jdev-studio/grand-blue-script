@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.5b";
+G.VERSION = "1.0.5c";
 G.UPDATED = "2026-09-29";
-G.NOTE = "Lock fish: no clicking, fish kept on the bar";
+G.NOTE = "Lock fish only, locks from the first frame";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -50,16 +50,9 @@ local x = {
 		settleMs = 12,
 		stableMs = 20,
 		maxAimFixes = 3,
-		reelInput = "Mouse",
-		freezeFish = true,
 		mineAutoSwing = true,
 		mineSwingDelayMs = 400,
 		mineStartTimeoutMs = 2500,
-		reelWatchdog = false,
-		reelRepressMs = 120,
-		reelLook = .1,
-		reelBrake = 1.0,
-		reelFishLead = .08,
 		farmAttackRange = 5,
 		farmRepressMs = 500,
 		farmMaxDistance = 600,
@@ -772,7 +765,7 @@ function T.step(t)
 	T.stage, T.actAt = "DOWN", t;
 	K.status = string.format("shake: click #%d", K.shakes + 1);
 end;
-local lockMode, lockTries = "fish", 0;
+local lockMode, lockTries, lockVerified = "fish", 0, false;
 local a = {};
 function a.reset()
 	a.t, a.bc, a.fc = nil, 0, 0;
@@ -787,44 +780,6 @@ function a.reset()
 	lockMode = "fish";
 end;
 a.reset();
-local N = 2.0;
-local U = 400;
-function a.perfectTime(t, o)
-	if t <= 0 then
-		return nil;
-	end;
-	local B, G = 0, o;
-	while G < 100 and B < 600 do
-		B = B + .033333333333333;
-		G = G + t / 30;
-	end;
-	return B;
-end;
-function a.tooEarly(t, o)
-	if a.safeAt == nil then
-		local o = S(S(S(S(r(), "PlayerGui"), "Fishing"), "Progress Bar"), "Gain");
-		local B, G = pcall(function()
-				return o.Text;
-			end);
-		local x = B and tonumber(string.match(tostring(G), "([%d%.]+)%%")) or nil;
-		local Q = x and a.perfectTime(x, math.min(t, .3) * 100);
-		a.safeAt = K.phaseAt + math.min(Q and (Q * 1000) * N + U or 2500, 6000);
-	end;
-	return o < a.safeAt;
-end;
-function a.holdBack(t, o)
-	if type(t) ~= "number" or not a.tooEarly(t, o) then
-		a.hovering = false;
-		return false;
-	end;
-	if t >= .92 then
-		a.hovering = true;
-	elseif t <= .86 then
-		a.hovering = false;
-	end;
-	return a.hovering;
-end;
-local n = q.visible;
 local Y = q.pos;
 local W = q.size;
 function a.pinFish(t, o, B, G, x, Q, e, v, k)
@@ -870,104 +825,45 @@ function a.lockTick()
 	if not lk then
 		return;
 	end;
-	if not x.freezeFish or K.phase ~= "REEL" or tick() - lk.t > .5 then
+	if K.phase ~= "REEL" or tick() - lk.t > .5 then
 		a.lk = nil;
 		return;
 	end;
-	if lockMode ~= "fish" and lockMode ~= "bar" then
+	local ok1, J = pcall(memory_read, "float", lk.ma + Y);
+	local ok2, sz = pcall(memory_read, "float", lk.ma + W);
+	if not (ok1 and ok2) or type(J) ~= "number" or type(sz) ~= "number" or J ~= J or sz ~= sz or sz <= 0 or sz >= 1 then
 		return;
 	end;
-	pcall(function()
-		local J = memory_read("float", lk.ma + Y);
-		local sz = memory_read("float", lk.ma + W);
-		if type(J) ~= "number" or type(sz) ~= "number" or J ~= J or sz ~= sz or sz <= 0 or sz >= 1 then
-			return;
-		end;
-		if lockMode == "fish" then
-			local b = ((J * (1 - sz) + sz / 2) - lk.M / 2) / (1 - lk.M);
-			memory_write("float", lk.fa + Y, math.max(0, math.min(1, b)));
-		else
-			local f = memory_read("float", lk.fa + Y);
-			if type(f) ~= "number" or f ~= f then
-				return;
-			end;
-			local fc = f * (1 - lk.M) + lk.M / 2;
-			memory_write("float", lk.ma + Y, math.max(0, math.min(1, (fc - sz / 2) / (1 - sz))));
-		end;
-	end);
+	local Mf = lk.Mg or lk.M;
+	if Mf >= 1 then
+		return;
+	end;
+	local b = ((J * (1 - sz) + sz / 2) - Mf / 2) / (1 - Mf);
+	if b < 0 then
+		b = 0;
+	elseif b > 1 then
+		b = 1;
+	end;
+	pcall(memory_write, "float", lk.fa + Y, b);
 end;
-function a.probe(t)
+function a.pinFast(fishI, moveI)
+	local ok, fa, ma = pcall(function()
+			return fishI.Address, moveI.Address;
+		end);
+	if not (ok and type(fa) == "number" and type(ma) == "number" and fa > 0 and ma > 0) then
+		return false;
+	end;
+	local okm, fsz = pcall(memory_read, "float", fa + W);
+	if not (okm and type(fsz) == "number" and fsz == fsz and fsz > 0 and fsz < 1) then
+		return false;
+	end;
 	local lk = a.lk;
-	if not lk or a.pr then
-		return;
+	if lk and lk.fa == fa and lk.ma == ma then
+		lk.M, lk.t = fsz, tick();
+	else
+		a.lk = { fa = fa, ma = ma, M = fsz, t = tick() };
 	end;
-	local token = {};
-	a.pr = token;
-	local function rd(addr)
-		local ok, v = pcall(memory_read, "float", addr);
-		if ok and type(v) == "number" and v == v then
-			return v;
-		end;
-		return nil;
-	end;
-	local function alive()
-		return a.pr == token and a.lk ~= nil and K.phase == "REEL" and not G.dead;
-	end;
-	local function test(what)
-		local addr = what == "fish" and lk.fa + Y or lk.ma + Y;
-		local s0, t0 = rd(addr), tick();
-		task.wait(.03);
-		local s1, t1 = rd(addr), tick();
-		if not (s0 and s1) or not alive() then
-			return nil;
-		end;
-		local vel = t1 > t0 and (s1 - s0) / (t1 - t0) or 0;
-		local v = s1 < .5 and s1 + .25 or s1 - .25;
-		if not pcall(memory_write, "float", addr, v) then
-			return nil;
-		end;
-		local tw = tick();
-		local kept, undone, last = 0, 0, nil;
-		while tick() - tw < .15 and alive() do
-			task.wait();
-			local c = rd(addr);
-			if c then
-				local dt = tick() - tw;
-				if math.abs(c - (v + vel * dt)) < math.abs(c - (s1 + vel * (dt + (tw - t1)))) then
-					kept = kept + 1;
-				else
-					undone = undone + 1;
-				end;
-				last = c;
-			end;
-		end;
-		pcall(G.log, string.format("lock test %s: was %.3f moving %.2f/s, nudged to %.3f, then %s. %d reads kept it, %d put it back", what, s1, vel, v, last and string.format("%.3f", last) or "unreadable", kept, undone));
-		return kept >= 2 and kept > undone * 2;
-	end;
-	task.spawn(function()
-		local mode = "none";
-		if test("bar") then
-			mode = "bar";
-		elseif alive() and test("fish") then
-			mode = "fish";
-		end;
-		if a.pr ~= token then
-			return;
-		end;
-		a.pr = nil;
-		if not a.lk then
-			return;
-		end;
-		lockMode = mode;
-		if mode == "bar" then
-			pcall(notify, "Lock fish: the game follows the bar, holding the bar on the fish", 4);
-		elseif mode == "fish" then
-			pcall(notify, "Lock fish: the game follows the fish, holding it on the bar", 4);
-		else
-			lockTries = lockTries + 1;
-			pcall(notify, "Lock fish: the game keeps the positions to itself, so it can't be locked. Using tracking.", 5);
-		end;
-	end);
+	return true;
 end;
 function a.ensureLoop()
 	if a.lockLoop then
@@ -975,8 +871,12 @@ function a.ensureLoop()
 	end;
 	a.lockLoop = true;
 	task.spawn(function()
+		local clock = (os and os.clock) or tick;
 		while a.lk and not G.dead do
-			a.lockTick();
+			local stop = clock() + .01;
+			repeat
+				a.lockTick();
+			until clock() >= stop or not a.lk;
 			task.wait();
 		end;
 		a.lockLoop = false;
@@ -1058,7 +958,7 @@ function a.locate(t, o, B, G, x, Q, e, v)
 		end;
 		W = newW;
 		a.pinValid, a.pinFails, a.disc = nil, 0, nil;
-		lockMode, lockTries = "fish", 0;
+		lockMode, lockTries, lockVerified = "fish", 0, false;
 		pcall(notify, "Lock fish offsets re-detected", 4);
 		local gg = _G.GrandBlueFishMine;
 		if gg and gg.saveSettings then
@@ -1066,63 +966,15 @@ function a.locate(t, o, B, G, x, Q, e, v)
 		end;
 	end;
 end;
-function a.gameHeld(t)
-	if type(memory_read) ~= "function" then
-		return nil;
-	end;
-	local o = R("reelRight", function()
-			return S(t, "Right Arrow");
-		end);
-	local B = R("reelLeft", function()
-			return S(t, "Left Arrow");
-		end);
-	if not ((o and B)) then
-		return nil;
-	end;
-	local G, x, Q = pcall(function()
-			return memory_read("byte", o.Address + n), memory_read("byte", B.Address + n);
-		end);
-	if not G or not (((x == 0 and Q == 1) or (x == 1 and Q == 0))) then
-		return nil;
-	end;
-	return x == 1;
-end;
 function a.setHold(t)
-	if x.reelInput == "Space" then
-		g.release();
-		if t then
-			g.spaceDown();
-		else
-			g.spaceUp();
-		end;
+	g.spaceUp();
+	if t then
+		g.press();
 	else
-		g.spaceUp();
-		if t then
-			g.press();
-		else
-			g.release();
-		end;
+		g.release();
 	end;
 	a.hold = t;
 end;
-function a.frozen(t)
-	if a.hold or g.mouseHeld or g.spaceHeld then
-		a.setHold(false);
-	end;
-	if not a.letGo then
-		a.letGo = true;
-		pcall(mouse1release);
-		g.mouseHeld = false;
-	end;
-	a.repressAt, a.missSince, a.t, a.s = nil, nil, nil, nil;
-	local o = i("ReelProgress");
-	if type(o) == "number" then
-		K.lastProgress = o;
-		K.reelProgressSeen = true;
-	end;
-	K.status = string.format("reeling %d%% (fish frozen%s)", math.floor(((K.lastProgress or 0)) * 100), t);
-end;
-a.GEO_MS = 200;
 function a.step(t)
 	local o = R("reelMain", function()
 			return S(S(S(r(), "PlayerGui"), "Fishing"), "Main");
@@ -1139,199 +991,58 @@ function a.step(t)
 	if not ((B and G)) then
 		return;
 	end;
-	local Q = false;
-	local e = a.safeAt and (t < a.safeAt and string.format(", safe to finish in %.1fs", ((a.safeAt - t)) / 1000)) or "";
-	local k, J, q = V(o);
-	local M, b, P = V(B);
-	local O, Z, j = V(G);
-	if not ((k and (M and O))) or q < 10 then
-		a.geoFailAt = a.geoFailAt or t;
-		if a.hold and t - a.geoFailAt > 120 then
-			a.setHold(false);
-		end;
-		return;
+	if not a.letGo then
+		a.letGo = true;
+		pcall(mouse1release);
+		g.mouseHeld = false;
 	end;
-	a.geoFailAt = nil;
-	a.geo = {
-			at = t,
-			mx = k,
-			mw = q,
-			fx = M,
-			fw = P,
-			bx = O,
-			bw = j,
-		};
-	local locked = false;
-	local lockNote = "tracking";
-	if x.freezeFish then
-		if a.pinFish(B, G, k, q, M, P, O, j, Q) then
-			lockMode = "fish";
-			a.lockTick();
-			a.ensureLoop();
-			local fc = M + P / 2;
-			a.lkN = (a.lkN or 0) + 1;
-			if fc >= O and fc <= O + j then
-				a.lkIn = (a.lkIn or 0) + 1;
-			end;
-		elseif a.pinValid ~= true and a.disc ~= false then
-			a.locate(B, G, k, q, M, P, O, j);
-		end;
-		if a.pinValid ~= false then
-			a.frozen(a.pinValid == true and "" or ", checking lock");
-			return;
-		end;
-		lockNote = "tracking (lock unavailable)";
-		if not a.lockFailWarned then
-			a.lockFailWarned = true;
-			pcall(notify, "Lock fish couldn't lock the fish this reel, tracking instead", 4);
-		end;
-	end;
-	local h = (((O + j / 2) - k)) / q;
-	local l = (((M + P / 2) - k)) / q;
-	local bwN = j / q;
-	local f = t / 1000;
-	local s = a.s;
-	if not s then
-		a.s = { t = f, p = h, v = 0, f = l, vf = 0, up = 1.5, down = 1.5, frame = .045, last = a.hold and true or false, hist = { { at = f, hold = a.hold and true or false } } };
-		return;
-	end;
-	local dt = f - s.t;
-	if dt < .004 then
-		return;
-	end;
-	s.frame = s.frame * .8 + math.min(dt, .2) * .2;
-	local D = s.frame;
-	local lag = s.frame;
-	local hist = s.hist;
-	local function actingAt(tt)
-		local hld = false;
-		for i = 1, #hist do
-			local ev = hist[i];
-			if ev.at + D <= tt then
-				hld = ev.hold;
-			else
-				break;
-			end;
-		end;
-		return hld;
-	end;
-	local acting = actingAt(f - lag);
-	local aK = acting and s.up or -s.down;
-	local pp = s.p + s.v * dt + .5 * aK * dt * dt;
-	local res = h - pp;
-	local fpred = s.f + s.vf * dt;
-	local fr = l - fpred;
-	s.rb, s.rf = s.rb or .01, s.rf or .02;
-	local badB = math.abs(res) > math.max(.05, 5 * s.rb);
-	local badF = not locked and math.abs(fr) > math.max(.08, 5 * s.rf);
-	if (badB or badF) and (s.glitch or 0) < 3 then
-		s.glitch = (s.glitch or 0) + 1;
-	else
-		s.glitch, badB, badF = 0, false, false;
-	end;
-	if badB then
-		s.p = pp;
-		s.v = math.max(-3, math.min(3, s.v + aK * dt));
-		s.x1, s.x2 = nil, nil;
-	else
-		s.rb = s.rb * .9 + math.abs(res) * .1;
-		s.p = pp + .7 * res;
-		s.v = math.max(-3, math.min(3, s.v + aK * dt + .4 * res / dt));
-		if s.x1 and s.x2 and (h > .03 + bwN / 2 and h < .97 - bwN / 2) then
-			local acc = (h - 2 * s.x1 + s.x2) / (dt * s.dt1);
-			if actingAt(f - lag - dt) == acting and actingAt(f - lag - 2 * dt) == acting and math.abs(acc) < 60 then
-				if acting and acc > 0 then
-					s.up = math.min(20, s.up * .95 + acc * .05);
-				elseif not acting and acc < 0 then
-					s.down = math.min(20, s.down * .95 - acc * .05);
-				end;
-			end;
-		end;
-		s.up, s.down = math.max(.5, s.up), math.max(.5, s.down);
-		s.x2, s.x1, s.dt1 = s.x1, h, dt;
-	end;
-	if badF then
-		s.f = fpred;
-	elseif locked and math.abs(fr) > .35 then
-		s.f, s.vf = l, 0;
-	else
-		s.rf = s.rf * .9 + math.abs(fr) * .1;
-		s.f = fpred + .8 * fr;
-		s.vf = math.max(-4, math.min(4, s.vf + .5 * fr / dt));
-	end;
-	s.t = f;
-	local Pp, Vv = s.p, s.v;
-	local horizon = lag + D;
-	local hdt = horizon / 6;
-	local lo, hi = bwN / 2, 1 - bwN / 2;
-	for i = 0, 5 do
-		local ac = actingAt(f - lag + (i + .5) * hdt) and s.up or -s.down;
-		Pp = Pp + Vv * hdt + .5 * ac * hdt * hdt;
-		Vv = Vv + ac * hdt;
-		if Pp < lo then
-			Pp = lo;
-			if Vv < 0 then
-				Vv = 0;
-			end;
-		elseif Pp > hi then
-			Pp = hi;
-			if Vv > 0 then
-				Vv = 0;
-			end;
-		end;
-	end;
-	local lead = s.vf * horizon;
-	local cap = bwN * .45;
-	if lead > cap then
-		lead = cap;
-	elseif lead < -cap then
-		lead = -cap;
-	end;
-	local Vr = Vv - s.vf;
-	local stop = Vr > 0 and (Vr * Vr) / (2 * math.max(s.down, .3)) or -(Vr * Vr) / (2 * math.max(s.up, .3));
-	local c = (s.f + lead) - Pp - stop > 0;
-	if c ~= s.last then
-		s.last = c;
-		hist[#hist + 1] = { at = f, hold = c };
-		if #hist > 40 then
-			table.remove(hist, 1);
-		end;
-	end;
-	if a.repressAt then
-		if t < a.repressAt then
-			return;
-		end;
-		a.repressAt = nil;
+	if a.hold or g.mouseHeld then
+		g.release();
 		a.hold = false;
 	end;
-	if c ~= a.hold or (c and not ((g.mouseHeld or g.spaceHeld))) then
-		a.setHold(c);
-		a.missSince = nil;
-	elseif x.reelWatchdog then
-		local o = a.gameHeld(G);
-		if o ~= nil and (o ~= c and t - K.phaseAt > 700) then
-			a.missSince = a.missSince or t;
-			if t - a.missSince >= x.reelRepressMs then
-				a.missSince = nil;
-				K.represses = K.represses + 1;
-				g.releaseAll();
-				if c then
-					a.repressAt = t + 30;
-				else
-					pcall(keyrelease, 32);
-					pcall(mouse1release);
+	if g.spaceHeld then
+		g.spaceUp();
+	end;
+	local engaged = lockVerified and a.pinFast(B, G) or false;
+	if not engaged or t - (a.geoAt or -1000000000.0) >= 60 then
+		a.geoAt = t;
+		local k, J, q = V(o);
+		local M, b, P = V(B);
+		local O, Z, j = V(G);
+		if k and (M and O) and q and q >= 10 then
+			if not engaged then
+				if a.pinFish(B, G, k, q, M, P, O, j, false) then
+					engaged = true;
+					lockVerified = true;
+				elseif a.pinValid ~= true and a.disc ~= false then
+					a.locate(B, G, k, q, M, P, O, j);
 				end;
 			end;
-		else
-			a.missSince = nil;
+			if engaged then
+				if a.lk and P > 0 and P < q then
+					a.lk.Mg = P / q;
+				end;
+				local fc = M + P / 2;
+				a.lkN = (a.lkN or 0) + 1;
+				if fc >= O and fc <= O + j then
+					a.lkIn = (a.lkIn or 0) + 1;
+				end;
+			end;
 		end;
 	end;
-	local T = i("ReelProgress");
-	if type(T) == "number" then
-		K.lastProgress = T;
+	if engaged then
+		a.lockTick();
+		a.ensureLoop();
+	elseif a.pinValid == false and not a.lockFailWarned then
+		a.lockFailWarned = true;
+		pcall(notify, "Lock fish couldn't find the fish's memory offsets this reel", 4);
+	end;
+	local pr = i("ReelProgress");
+	if type(pr) == "number" then
+		K.lastProgress = pr;
 		K.reelProgressSeen = true;
 	end;
-	K.status = string.format("reeling %d%% %s%s", math.floor(((K.lastProgress or 0)) * 100), lockNote, e);
+	K.status = string.format("reeling %d%% (%s)", math.floor(((K.lastProgress or 0)) * 100), engaged and "fish locked" or (a.pinValid == false and "lock unavailable" or "checking lock"));
 end;
 local function C()
 	T.reset();
@@ -1389,9 +1100,6 @@ function eq.load()
 				if type(d[key]) == "number" then
 					x[key] = d[key];
 				end;
-			end;
-			if type(d.lockFish) == "boolean" then
-				x.freezeFish = d.lockFish;
 			end;
 			for _, key in ipairs({ "autoEquipRod", "autoEquipPick" }) do
 				if type(d[key]) == "boolean" then
@@ -1467,7 +1175,7 @@ local function I(t)
 	a.setHold(false);
 	local prog = K.lastProgress or 0;
 	local pct = (a.lkN or 0) >= 5 and math.floor((a.lkIn or 0) / a.lkN * 100 + .5) or nil;
-	pcall(notify, string.format("Reel %s at %d%% progress%s", prog >= .5 and "caught" or "lost", math.floor(prog * 100), pct and string.format(", fish locked on the bar %d%% of the reel", pct) or (x.freezeFish and ", lock never engaged" or "")), 4);
+	pcall(notify, string.format("Reel %s at %d%% progress%s", prog >= .5 and "caught" or "lost", math.floor(prog * 100), pct and string.format(", fish on the bar %d%% of the reel", pct) or ", lock never engaged"), 4);
 	a.lk = nil;
 	if ((K.lastProgress or 0)) >= .5 then
 		K.caught = K.caught + 1;
@@ -3498,7 +3206,6 @@ end;
 					menuKey = ui.Keybind,
 					theme = ui.Theme,
 					castPct = x.castPct,
-					lockFish = x.freezeFish and true or false,
 					autoEquipRod = x.autoEquipRod and true or false,
 					autoEquipPick = x.autoEquipPick and true or false,
 					rodKey = x.rodKey,
@@ -3592,15 +3299,6 @@ end;
 					G.saveSettings();
 				end });
 		slider(fish, "castPct", "Release at", 1, 100, 1, "Cast power release, in %");
-		fish:AddToggle({
-			Title = "Lock fish",
-			Description = "No clicking, the fish is kept on the bar",
-			Default = x.freezeFish,
-			Callback = function(t)
-				x.freezeFish = t;
-				G.saveSettings();
-			end,
-		});
 		ee.mineToggle = mine:AddToggle({ Title = "Auto Mine", Description = "Hotkey: F2", Default = false, Callback = function(t)
 					G.setMining(t);
 				end });

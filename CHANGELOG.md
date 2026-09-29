@@ -6,6 +6,13 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.0.5c - 2026-09-29
+
+- Tracking is removed; Lock fish is the only reel method and is always on (the toggle is gone).
+- The lock offsets are checked once per session instead of every reel. That check kept failing while the fish moved, so the fish ran free at the start of each reel; now later reels lock from the first frame.
+- Between yields the lock rewrites the fish position continuously for about 10 ms, on top of every render, physics and heartbeat step, so the game's own animation is overwritten almost every frame.
+- The fish is centred using its on-screen width, and the lock writer is lighter so it can run many more times per frame.
+
 ## 1.0.5b - 2026-09-29
 
 - Lock fish is back (Fish tab, on by default) and works like the original script: no clicking during the reel, so the bar rests at the far left, and the fish is written onto the bar's position on every render, physics and heartbeat step plus its own loop. In 1.0.4 tracking kept running while locked, which kept the bar moving and made the lock look worse than it was. If the lock can't engage at all in a reel it says so and tracks for that reel.
