@@ -2,6 +2,10 @@
 
 The current version is shown in the menu under Settings, and in the notification when the script loads.
 
+## 1.0.9 - 2026-09-29
+
+- Shake: at low frame rates (around 20 fps) the click was sent before the game had registered the cursor over the button, so nothing happened. It now moves slightly off-centre and onto the button so the game always sees movement, and waits until the game's own cursor position is over the button before clicking (up to 0.25 s, then it clicks anyway).
+
 ## 1.0.8 - 2026-09-29
 
 - Cast: it often needed several up-and-down passes before releasing, because it only fired when a sampled frame landed inside a very narrow window. It now measures the bar speed and input delay and releases on the frame that lands closest to the target, normally on the first pass. If it ever misses both crossings the window widens to 3% on the next pass. Wait between a catch and the next cast is now 1.0 s (was 1.55 s).
@@ -40,6 +44,10 @@ The current version is shown in the menu under Settings, and in the notification
 ## 1.0.2 - 2026-09-29
 
 - Shake aiming no longer gets thrown off when the game reports the cursor position late (seen on a slower laptop at about 44 fps). It now waits for the reading to settle before trusting it, and undoes any correction that makes the aim worse.
+
+## 1.0.9 - 2026-09-29
+
+- Shake: at low frame rates (around 20 fps) the click was sent before the game had registered the cursor over the button, so nothing happened. It now moves slightly off-centre and onto the button so the game always sees movement, and waits until the game's own cursor position is over the button before clicking (up to 0.25 s, then it clicks anyway).
 
 ## 1.0.8 - 2026-09-29
 

@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.8";
+G.VERSION = "1.0.9";
 G.UPDATED = "2026-09-29";
-G.NOTE = "First-pass cast, simple shake, quicker reel";
+G.NOTE = "Shake waits for the game to see the cursor";
 pcall(function()
 	setrobloxinput(true);
 end);
@@ -646,6 +646,7 @@ local T = {
 	};
 T.SCAN_MS = 3;
 function T.moveTo(cx, cy)
+	g.moveTo(cx + 3, cy + 3);
 	g.moveTo(cx, cy);
 end;
 function T.findButton(t)
@@ -694,7 +695,7 @@ function T.scan(t)
 	return nil;
 end;
 function T.reset()
-	T.stage, T.target, T.fixes, T.last, T.lastAt = "SEEK", nil, 0, nil, nil;
+	T.stage, T.target, T.fixes, T.last, T.lastAt, T.nudgeAt = "SEEK", nil, 0, nil, nil, nil;
 	T.scanAt = nil;
 	g.release();
 end;
@@ -732,8 +733,20 @@ function T.step(t)
 	end;
 	if math.abs(o.cx - T.target.cx) > 2 or math.abs(o.cy - T.target.cy) > 2 then
 		T.moveTo(o.cx, o.cy);
+		T.nudgeAt = t;
 	end;
 	T.target = o;
+	local mx, my = g.readMouse();
+	local rad = math.max(6, math.min(o.w, o.h) * .35);
+	local inside = mx and (math.abs(mx - o.cx) <= rad and math.abs(my - o.cy) <= rad);
+	if not inside and t - T.actAt < 250 then
+		if t - (T.nudgeAt or 0) >= 60 then
+			T.nudgeAt = t;
+			T.moveTo(o.cx, o.cy);
+		end;
+		K.status = "shake: waiting for cursor";
+		return;
+	end;
 	pcall(mouse1press);
 	g.mouseHeld = true;
 	T.stage, T.actAt = "DOWN", t;
