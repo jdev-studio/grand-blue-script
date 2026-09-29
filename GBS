@@ -3146,7 +3146,7 @@ do
 		  box("brandBadge",25,25,35,35,accent,.12,10,20)
 		  glow("brandHalo",30,30,25,25,.8,18)
 		  icon("brandMark","brand",32.5,32.5,accent,1,42)
-		  label("brand","GBS",70,25,27,ink,sidebarText,true)
+		  label("brand","JDUI",70,25,27,ink,sidebarText,true)
 		
 		  box("headerRule",contentLeft,78,761-contentLeft,1,ink,.075,0,20)
 		  label("sectionSub",selected==home and "" or selected==settings and "" or "",contentLeft+1,59,11,muted,contentA)
