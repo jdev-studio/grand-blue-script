@@ -12,9 +12,30 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.1.1";
+G.VERSION = "1.0.4c";
 G.UPDATED = "2026-09-29";
-G.NOTE = "Lock fish tests whether to move the fish or the bar";
+G.NOTE = "Messages also print to the console";
+G.logLines = {};
+function G.log(msg)
+	local okT, ts = pcall(os.date, "%H:%M:%S");
+	local line = (okT and ts or "") .. "  " .. tostring(msg);
+	print("[Grand Blue] " .. tostring(msg));
+	local L = G.logLines;
+	L[#L + 1] = line;
+	if #L > 200 then
+		table.remove(L, 1);
+	end;
+	pcall(writefile, "grandblue_log.txt", table.concat(L, "\n"));
+end;
+do
+	local rawNotify = notify;
+	notify = function(msg, d)
+		pcall(G.log, msg);
+		if type(rawNotify) == "function" then
+			return rawNotify(msg, d);
+		end;
+	end;
+end;
 pcall(function()
 	setrobloxinput(true);
 end);
@@ -912,6 +933,7 @@ function a.probe(t)
 		return;
 	end;
 	local cur = rd(p.addr);
+	pcall(G.log, string.format("lock test %s: was %.3f, nudged to %.3f, %d ms later %s", p.what, p.v0, p.v, math.floor(t - p.at), cur and string.format("%.3f", cur) or "unreadable"));
 	if cur and math.abs(cur - p.v) < math.abs(cur - p.v0) then
 		lockMode = p.what;
 		a.pr = nil;
@@ -1329,9 +1351,9 @@ end;
 G.setRunning = L;
 local function I(t)
 	a.setHold(false);
-	if (a.lkN or 0) >= 5 then
-		pcall(notify, string.format("Lock fish: on the fish %d%% of the reel", math.floor((a.lkIn or 0) / a.lkN * 100 + .5)), 3);
-	end;
+	local prog = K.lastProgress or 0;
+	local pct = (a.lkN or 0) >= 5 and math.floor((a.lkIn or 0) / a.lkN * 100 + .5) or nil;
+	pcall(notify, string.format("Reel %s at %d%% progress. Lock: %s%s", prog >= .5 and "caught" or "lost", math.floor(prog * 100), tostring(lockMode or (x.freezeFish and "not tested yet" or "off")), pct and string.format(", fish on the bar %d%% of the reel", pct) or ""), 4);
 	a.lk = nil;
 	if ((K.lastProgress or 0)) >= .5 then
 		K.caught = K.caught + 1;
