@@ -2,6 +2,14 @@
 
 The current version is shown in the menu under Settings, and in the notification when the script loads.
 
+## 1.0.2 - 2026-09-29
+
+- Shake aiming no longer gets thrown off when the game reports the cursor position late (seen on a slower laptop at about 44 fps). It now waits for the reading to settle before trusting it, and undoes any correction that makes the aim worse.
+
+## 1.0.2 - 2026-09-29
+
+- Shake aiming no longer gets thrown off when the game reports the cursor position late (seen on a slower laptop at ~44 fps). It now waits for the reading to settle before trusting it, and undoes any correction that makes the aim worse.
+
 ## 1.0.1 - 2026-09-29
 
 - Fixed shake clicks landing next to the icon on some screens. The aiming now learns the scale and offset between the mouse and the game window (display scaling, windowed mode) and waits for a fresh cursor reading before correcting.
