@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.7";
+G.VERSION = "1.0.8";
 G.UPDATED = "2026-09-29";
-G.NOTE = "Shake click fix, reel lock auto-detect";
+G.NOTE = "First-pass cast, simple shake, quicker reel";
 pcall(function()
 	setrobloxinput(true);
 end);
@@ -22,10 +22,10 @@ pcall(mouse1release);
 local x = {
 		castPct = 98,
 		castTimeoutMs = 2500,
-		recastAfterReelMs = 1550,
+		recastAfterReelMs = 1000,
 		castRepressMs = 250,
 		idleTimeoutMs = 20000,
-		clickHoldMs = 35,
+		clickHoldMs = 15,
 		clickGapMs = 8,
 		settleMs = 12,
 		stableMs = 20,
@@ -37,9 +37,9 @@ local x = {
 		mineStartTimeoutMs = 2500,
 		reelWatchdog = true,
 		reelRepressMs = 120,
-		reelLook = .15,
+		reelLook = .1,
 		reelBrake = 1.0,
-		reelFishLead = .3,
+		reelFishLead = .08,
 		farmAttackRange = 5,
 		farmRepressMs = 500,
 		farmMaxDistance = 600,
@@ -500,12 +500,28 @@ function c.readFill()
 	return X.readBar("Fishing Bar");
 end;
 function c.watch(t)
-	local o = c.timer;
-	if o.sentAt and not c.readFill() then
-		X.gone(o, t);
+	if not c.sentAt then
+		return;
 	end;
-	if o.sentAt and t - o.sentAt > 500 then
-		o.sentFrames, o.sentAt = nil, nil;
+	if not c.readFill() then
+		local d = t - c.sentAt;
+		if d > 0 and d < 400 then
+			c.lats = c.lats or {};
+			table.insert(c.lats, d);
+			if #c.lats > 7 then
+				table.remove(c.lats, 1);
+			end;
+			local s = {};
+			for _, v in ipairs(c.lats) do
+				s[#s + 1] = v;
+			end;
+			table.sort(s);
+			local frame = (c.s and c.s.dt) or 16;
+			c.lat = math.max(0, math.min(120, s[math.floor((#s + 1) / 2)] - frame));
+		end;
+		c.sentAt = nil;
+	elseif t - c.sentAt > 400 then
+		c.sentAt = nil;
 	end;
 end;
 function c.step(t, o)
@@ -522,6 +538,7 @@ function c.step(t, o)
 		K.castPressAt = t;
 		K.castFill, K.castFillAt, K.castRate = 0, t, 0;
 		X.reset(c.timer);
+		c.s = nil;
 		E("CHARGE");
 		K.status = "charging cast";
 		return;
@@ -551,26 +568,69 @@ function c.step(t, o)
 	if not g.mouseHeld then
 		g.press();
 	end;
-	local Q = c.timer;
 	K.status = string.format("charging %d%%", math.floor(B * 100));
 	local e = math.max(.01, math.min(1, x.castPct / 100));
-	local v = { { lo = math.max(0, e - .01), hi = math.min(1, e + .01) } };
-	local k = false;
-	if X.observe(Q, B, t, v) and Q.dir > 0 then
-		local pred = X.predict(Q, X.delay(Q), v);
-		local band = math.max(.01, (Q.step or 0) / 2);
-		if pred and B >= e - .12 and math.abs(pred - e) <= band then
-			k = true;
+	local s = c.s;
+	if not s or s.pressAt ~= K.castPressAt then
+		s = { pressAt = K.castPressAt, n = 0, dt = 16 };
+		c.s = s;
+	end;
+	if s.f ~= nil then
+		if math.abs(B - s.f) < 1e-05 then
+			return;
 		end;
+		local dt = t - s.at;
+		if dt <= 0 then
+			return;
+		end;
+		local v = (B - s.f) / dt;
+		local dir = v > 0 and 1 or -1;
+		if s.dir and s.dir ~= dir then
+			s.flips = (s.flips or 0) + 1;
+		end;
+		if s.dir == dir then
+			s.spd = s.spd and (s.spd * .5 + math.abs(v) * .5) or math.abs(v);
+			s.n = s.n + 1;
+		end;
+		s.dir = dir;
+		s.dt = s.dt * .7 + math.min(dt, 100) * .3;
 	end;
-	if B >= e - .01 then
-		k = true;
+	s.f, s.at = B, t;
+	local fire, aim = false, B;
+	if s.n >= 1 and s.spd and s.spd > 0 and s.spd < .01 then
+		local lat = math.min(c.lat or s.dt, 120, .35 / s.spd);
+		local function land(ahead)
+			local p = B + s.dir * s.spd * ahead;
+			for _ = 1, 3 do
+				if p > 1 then
+					p = 2 - p;
+				elseif p < 0 then
+					p = -p;
+				else
+					break;
+				end;
+			end;
+			return p;
+		end;
+		local now = land(lat);
+		local nxt = land(lat + s.dt);
+		local err = math.abs(now - e);
+		local tol = math.max(.01, s.spd * s.dt / 2 + .003);
+		if (s.flips or 0) >= 2 then
+			tol = math.max(tol, .03);
+		end;
+		if err <= tol and err <= math.abs(nxt - e) + 1e-06 then
+			fire, aim = true, now;
+		end;
+	elseif math.abs(B - e) <= .015 then
+		fire = true;
 	end;
-	if k then
-		g.release();
-		X.sent(Q, t);
-		K.lastCastAim = X.predict(Q, X.delay(Q), v) or B;
-		K.status = string.format("cast at %d%% (aimed %.1f%%)", math.floor(B * 100), ((K.lastCastAim or 0)) * 100);
+	if fire then
+		pcall(mouse1release);
+		g.mouseHeld = false;
+		c.sentAt = t;
+		K.lastCastAim = aim;
+		K.status = string.format("cast at %d%% (aimed %.1f%%)", math.floor(B * 100), aim * 100);
 		E("WAIT");
 	end;
 end;
@@ -607,99 +667,76 @@ function T.scan(t)
 	if not B then
 		return nil;
 	end;
-	local Q, e, v = nil, nil, {};
-	local k, J = T.liveW, T.last;
-	for o, B in ipairs(G) do
-		if B.Name == "Button" then
-			local o, G, S, r = V(B);
-			if o and (S > 4 and r > 4) then
-				local B, q = o + S / 2, G + r / 2;
-				local M = math.floor(B) .. (":" .. math.floor(q));
-				v[M] = true;
-				local b = T.sizes[M];
-				if not b or math.abs(b.w - S) >= .5 then
-					b = { w = S, since = t };
-					T.sizes[M] = b;
-				end;
-				local P = t - b.since >= x.stableMs;
-				local O = not k or (S > k * .7 and S < k * 1.3);
-				if P and O then
-					local t = {
-							x = o,
-							y = G,
-							w = S,
-							h = r,
-							cx = B,
-							cy = q,
-						};
-					if J and (math.abs(J.cx - B) < 8 and math.abs(J.cy - q) < 8) then
-						e = t;
-					else
-						Q = t;
-					end;
+	local best, again = nil, nil;
+	local L = T.last;
+	for _, b in ipairs(G) do
+		local okn, name = pcall(function()
+				return b.Name;
+			end);
+		if okn and name == "Button" then
+			local bx, by, bw, bh = V(b);
+			if bx and (bw > 4 and bh > 4) then
+				local btn = { x = bx, y = by, w = bw, h = bh, cx = bx + bw / 2, cy = by + bh / 2 };
+				if L and (math.abs(L.cx - btn.cx) < math.max(8, bw / 3) and math.abs(L.cy - btn.cy) < math.max(8, bh / 3)) then
+					again = btn;
+				elseif not best then
+					best = btn;
 				end;
 			end;
 		end;
 	end;
-	for t in pairs(T.sizes) do
-		if not v[t] then
-			T.sizes[t] = nil;
-		end;
+	if best then
+		return best, false;
 	end;
-	if Q then
-		return Q, false;
+	if again and t - (T.lastAt or 0) >= 150 then
+		return again, true;
 	end;
-	return e, e ~= nil;
+	return nil;
 end;
 function T.reset()
-	T.stage, T.target, T.fixes, T.last = "SEEK", nil, 0, nil;
+	T.stage, T.target, T.fixes, T.last, T.lastAt = "SEEK", nil, 0, nil, nil;
 	T.scanAt = nil;
 	g.release();
 end;
 function T.step(t)
-	if T.stage == "HOLD" then
-		if t >= T.actAt then
-			g.release();
-			T.last = T.target;
-			T.scanAt = nil;
-			K.shakes = K.shakes + 1;
-			T.stage, T.actAt = "GAP", t + x.clickGapMs;
+	if T.stage == "DOWN" then
+		if t - T.actAt < x.clickHoldMs then
+			return;
 		end;
-		return;
+		pcall(mouse1release);
+		g.mouseHeld = false;
+		T.last, T.lastAt = T.target, t;
+		T.scanAt = nil;
+		K.shakes = K.shakes + 1;
+		T.stage = "SEEK";
 	end;
-	if T.stage == "GAP" then
-		if t >= T.actAt then
-			T.stage = "SEEK";
-		end;
-		return;
-	end;
-	local o, B = T.findButton(t);
+	local o, again = T.findButton(t);
 	if not o then
 		T.stage = "SEEK";
 		K.status = "shake: waiting for button";
 		return;
 	end;
-	local G = not T.target or math.abs(T.target.cx - o.cx) > 6 or math.abs(T.target.cy - o.cy) > 6;
-	if T.stage == "SEEK" or G then
-		if B and T.stage == "SEEK" then
+	if T.stage ~= "AIM" then
+		if again then
 			K.misses = K.misses + 1;
 		end;
-		T.target = o;
 		if g.mouseHeld then
-			g.release();
+			pcall(mouse1release);
+			g.mouseHeld = false;
 		end;
+		T.target = o;
 		T.moveTo(o.cx, o.cy);
-		T.stage, T.actAt = "AIM", t + x.settleMs;
+		T.stage, T.actAt = "AIM", t;
 		K.status = string.format("shake: aim %d,%d", o.cx, o.cy);
 		return;
 	end;
-	if t < T.actAt then
-		return;
+	if math.abs(o.cx - T.target.cx) > 2 or math.abs(o.cy - T.target.cy) > 2 then
+		T.moveTo(o.cx, o.cy);
 	end;
-	T.liveW = o.w;
+	T.target = o;
 	pcall(mouse1press);
 	g.mouseHeld = true;
-	T.stage, T.actAt = "HOLD", t + x.clickHoldMs;
+	T.stage, T.actAt = "DOWN", t;
 	K.status = string.format("shake: click #%d", K.shakes + 1);
 end;
 local a = {};
@@ -947,7 +984,7 @@ function a.step(t)
 	if not ((B and G)) then
 		return;
 	end;
-	local Q = a.holdBack(i("ReelProgress"), t);
+	local Q = false;
 	local e = a.safeAt and (t < a.safeAt and string.format(", safe to finish in %.1fs", ((a.safeAt - t)) / 1000)) or "";
 	local v = a.geo;
 	if x.freezeFish and (a.pinValid == true and (v and (t - v.at < a.GEO_MS and a.pinFish(B, G, v.mx, v.mw, v.fx, v.fw, v.bx, v.bw, Q)))) then
@@ -992,7 +1029,11 @@ function a.step(t)
 		local o = ((h - a.bc)) / t;
 		local B = ((l - a.fc)) / t;
 		a.vb = a.vb * .3 + o * .7;
-		a.vf = a.vf * .4 + B * .6;
+		if B * a.vf < 0 and math.abs(B) > .05 then
+			a.vf = B;
+		else
+			a.vf = a.vf * .25 + B * .75;
+		end;
 		local G = math.abs(o - a.vbRaw) / t;
 		a.vbRaw = o;
 		if math.abs(o) > .0001 and (G > .05 and (G < 20 and (h > .02 and h < .98))) then
@@ -1001,7 +1042,14 @@ function a.step(t)
 	end;
 	a.t, a.bc, a.fc = f, h, l;
 	local E = math.max(a.acc, .3);
-	local X = l + a.vf * x.reelFishLead;
+	local lead = a.vf * x.reelFishLead;
+	local cap = (j / q) * .35;
+	if lead > cap then
+		lead = cap;
+	elseif lead < -cap then
+		lead = -cap;
+	end;
+	local X = l + lead;
 	local y = ((a.vb * math.abs(a.vb)) / ((2 * E))) * x.reelBrake;
 	local c = (((X - h)) - y) - a.vb * x.reelLook > 0;
 	if a.repressAt then
