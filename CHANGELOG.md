@@ -2,6 +2,14 @@
 
 The current version is shown in the menu under Settings, and in the notification when the script loads.
 
+## 1.0.5 - 2026-09-29
+
+- Removed the Reel and Monster tabs from 1.0.4. Fishfolk fights now happen automatically while Auto Fish is on (with return to the fishing spot). The only setting left for it is a Weapon slot key on the Fish tab.
+- Reel tracking uses the left mouse button only.
+- Shake clicking is much faster: no approach step, no cursor check, and shorter move/hold/gap delays.
+- Cast release now fires as soon as the bar is predicted to land within 1% of the target, instead of waiting for the closest frame, which was often a frame late and overshot.
+- The hold-back near the end of a reel can no longer wait 20 seconds when the game's progress text can't be read. It's capped at a few seconds.
+
 ## 1.0.4 - 2026-09-29
 
 - New Reel tab: live status line (shows whether the fish is being locked or tracked), plus look-ahead, braking, fish lead and input settings that were hard-coded before. They save with the rest of the settings.
@@ -15,6 +23,14 @@ The current version is shown in the menu under Settings, and in the notification
 ## 1.0.2 - 2026-09-29
 
 - Shake aiming no longer gets thrown off when the game reports the cursor position late (seen on a slower laptop at about 44 fps). It now waits for the reading to settle before trusting it, and undoes any correction that makes the aim worse.
+
+## 1.0.5 - 2026-09-29
+
+- Removed the Reel and Monster tabs from 1.0.4. Fishfolk fights now happen automatically while Auto Fish is on (with return to the fishing spot). The only setting left for it is a Weapon slot key on the Fish tab.
+- Reel tracking uses the left mouse button only.
+- Shake clicking is much faster: no approach step, no cursor check, and shorter move/hold/gap delays.
+- Cast release now fires as soon as the bar is predicted to land within 1% of the target, instead of waiting for the closest frame, which was often a frame late and overshot.
+- The hold-back near the end of a reel can no longer wait 20 seconds when the game's progress text can't be read. It's capped at a few seconds.
 
 ## 1.0.4 - 2026-09-29
 

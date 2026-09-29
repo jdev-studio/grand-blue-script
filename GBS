@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.4";
+G.VERSION = "1.0.5";
 G.UPDATED = "2026-09-29";
-G.NOTE = "Reel tuning tab and live status";
+G.NOTE = "Faster shake, tighter cast, left-click reel";
 pcall(function()
 	setrobloxinput(true);
 end);
@@ -25,12 +25,12 @@ local x = {
 		recastAfterReelMs = 1550,
 		castRepressMs = 250,
 		idleTimeoutMs = 20000,
-		clickHoldMs = 45,
-		clickGapMs = 40,
-		settleMs = 25,
-		stableMs = 30,
+		clickHoldMs = 18,
+		clickGapMs = 6,
+		settleMs = 6,
+		stableMs = 8,
 		maxAimFixes = 3,
-		reelInput = "Space",
+		reelInput = "Mouse",
 		freezeFish = true,
 		mineAutoSwing = true,
 		mineSwingDelayMs = 400,
@@ -554,12 +554,16 @@ function c.step(t, o)
 	local Q = c.timer;
 	K.status = string.format("charging %d%%", math.floor(B * 100));
 	local e = math.max(.01, math.min(1, x.castPct / 100));
-	local v = { { lo = math.max(0, e - .005), hi = math.min(1, e + .005) } };
+	local v = { { lo = math.max(0, e - .01), hi = math.min(1, e + .01) } };
 	local k = false;
-	if X.observe(Q, B, t, v) and X.shouldSend(Q, v) then
-		k = true;
+	if X.observe(Q, B, t, v) then
+		local pred = X.predict(Q, X.delay(Q), v);
+		local margin = math.max(.01, (Q.step or 0) / 2);
+		if pred and Q.dir > 0 and pred >= e - margin then
+			k = true;
+		end;
 	end;
-	if B >= math.min(1, e + .02) then
+	if math.abs(B - e) <= .01 or B >= math.min(1, e + .01) then
 		k = true;
 	end;
 	if k then
@@ -580,41 +584,9 @@ local T = {
 		last = nil,
 		sizes = {},
 	};
-T.SCAN_MS = 12;
-T.sx, T.sy, T.ox, T.oy = 1, 1, 0, 0;
-function T.cmdFor(cx, cy)
-	return (cx - T.ox) / T.sx, (cy - T.oy) / T.sy;
-end;
+T.SCAN_MS = 3;
 function T.moveTo(cx, cy)
-	local rx, ry = g.readMouse();
-	T.prevRead = rx and { rx, ry } or nil;
-	local mx, my = T.cmdFor(cx, cy);
-	T.lastCmd = { mx, my };
-	T.aimStart, T.aimPrev = k(), nil;
-	g.moveTo(mx, my);
-end;
-function T.learn(rx, ry)
-	local c = T.lastCmd;
-	if not c then
-		return;
-	end;
-	local p = T.sample;
-	if p then
-		if math.abs(c[1] - p[1]) > 80 then
-			local s = (rx - p[3]) / (c[1] - p[1]);
-			if s > .8 and s < 1.3 then
-				T.sx = (T.sx + s) / 2;
-			end;
-		end;
-		if math.abs(c[2] - p[2]) > 80 then
-			local s = (ry - p[4]) / (c[2] - p[2]);
-			if s > .8 and s < 1.3 then
-				T.sy = (T.sy + s) / 2;
-			end;
-		end;
-	end;
-	T.ox, T.oy = rx - T.sx * c[1], ry - T.sy * c[2];
-	T.sample = { c[1], c[2], rx, ry };
+	g.moveTo(cx, cy);
 end;
 function T.findButton(t)
 	if T.scanAt and t - T.scanAt < T.SCAN_MS then
@@ -712,58 +684,16 @@ function T.step(t)
 		if B and T.stage == "SEEK" then
 			K.misses = K.misses + 1;
 		end;
-		T.target, T.fixes, T.lastErr, T.snap = o, 0, nil, nil;
-		local G = math.min(12, o.w / 5);
-		T.moveTo(o.cx + G, o.cy + G);
-		T.stage, T.actAt = "APPROACH", t + x.settleMs;
-		K.status = string.format("shake: aim %d,%d", o.cx, o.cy);
-		return;
-	end;
-	if T.stage == "APPROACH" then
-		if t < T.actAt then
-			return;
-		end;
+		T.target = o;
 		T.moveTo(o.cx, o.cy);
 		T.stage, T.actAt = "AIM", t + x.settleMs;
+		K.status = string.format("shake: aim %d,%d", o.cx, o.cy);
 		return;
 	end;
 	if t < T.actAt then
 		return;
 	end;
-	local Q, e = g.readMouse();
-		if Q then
-			local off = math.abs(Q - o.cx) > 6 or math.abs(e - o.cy) > 6;
-			if off then
-				local pr = T.aimPrev;
-				local stable = false;
-				if pr and (pr[1] == Q and pr[2] == e) then
-					stable = t - pr[3] >= 30;
-				else
-					T.aimPrev = { Q, e, t };
-				end;
-				if not stable and t - (T.aimStart or t) < 250 then
-					return;
-				end;
-				if stable then
-					local err = math.abs(Q - o.cx) + math.abs(e - o.cy);
-					if T.fixes > 0 and (T.lastErr and (err > T.lastErr + 3 and T.snap)) then
-						T.sx, T.sy, T.ox, T.oy = T.snap[1], T.snap[2], T.snap[3], T.snap[4];
-						T.fixes = 99;
-					else
-						T.snap = { T.sx, T.sy, T.ox, T.oy };
-						T.learn(Q, e);
-						T.lastErr = err;
-					end;
-					if T.fixes < math.max(5, x.maxAimFixes) then
-						T.fixes = T.fixes + 1;
-						T.moveTo(o.cx, o.cy);
-						T.actAt = t + x.settleMs;
-						return;
-					end;
-				end;
-			end;
-		end;
-		T.liveW = o.w;
+	T.liveW = o.w;
 	g.press();
 	T.stage, T.actAt = "HOLD", t + x.clickHoldMs;
 	K.status = string.format("shake: click #%d", K.shakes + 1);
@@ -800,7 +730,7 @@ function a.tooEarly(t, o)
 			end);
 		local x = B and tonumber(string.match(tostring(G), "([%d%.]+)%%")) or nil;
 		local Q = x and a.perfectTime(x, math.min(t, .3) * 100);
-		a.safeAt = K.phaseAt + ((Q and (Q * 1000) * N + U or 20000));
+		a.safeAt = K.phaseAt + math.min(Q and (Q * 1000) * N + U or 2500, 6000);
 	end;
 	return o < a.safeAt;
 end;
@@ -965,8 +895,8 @@ function a.step(t)
 		end;
 		local o = ((h - a.bc)) / t;
 		local B = ((l - a.fc)) / t;
-		a.vb = a.vb * .5 + o * .5;
-		a.vf = a.vf * .6 + B * .4;
+		a.vb = a.vb * .3 + o * .7;
+		a.vf = a.vf * .4 + B * .6;
 		local G = math.abs(o - a.vbRaw) / t;
 		a.vbRaw = o;
 		if math.abs(o) > .0001 and (G > .05 and (G < 20 and (h > .02 and h < .98))) then
@@ -1064,21 +994,10 @@ function eq.load()
 					x[key] = d[key];
 				end;
 			end;
-			for _, key in ipairs({ "freezeFish", "autoEquipRod", "autoEquipPick", "fightMobs", "fightReturn" }) do
+			for _, key in ipairs({ "freezeFish", "autoEquipRod", "autoEquipPick" }) do
 				if type(d[key]) == "boolean" then
 					x[key] = d[key];
 				end;
-			end;
-			for key, range in pairs({ reelLook = { 0, .6 }, reelBrake = { .3, 3 }, reelFishLead = { 0, 1.5 } }) do
-				if type(d[key]) == "number" then
-					x[key] = math.max(range[1], math.min(range[2], d[key]));
-				end;
-			end;
-			if d.reelInput == "Space" or d.reelInput == "Mouse" then
-				x.reelInput = d.reelInput;
-			end;
-			if type(d.fightRange) == "number" then
-				x.fightRange = math.max(10, math.min(300, d.fightRange));
 			end;
 			if type(d.castPct) == "number" then
 				x.castPct = math.max(1, math.min(100, d.castPct));
@@ -3178,13 +3097,6 @@ end;
 					rodKey = x.rodKey,
 					pickKey = x.pickKey,
 					weaponKey = x.weaponKey,
-					fightMobs = x.fightMobs and true or false,
-					fightReturn = x.fightReturn and true or false,
-					fightRange = x.fightRange,
-					reelLook = x.reelLook,
-					reelBrake = x.reelBrake,
-					reelFishLead = x.reelFishLead,
-					reelInput = x.reelInput,
 					espFruits = F.fruits and true or false,
 					espChests = F.chests and true or false,
 					espTreasure = Be.on and true or false,
@@ -3250,49 +3162,6 @@ end;
 		local mine = ui:AddTab({ Title = "Mine", Icon = "layers" });
 		local farm = ui:AddTab({ Title = "Farm", Icon = "shield" });
 		local esp = ui:AddTab({ Title = "ESP", Icon = "spark" });
-		local reel = ui:AddTab({ Title = "Reel", Icon = "sliders" });
-		ee.reelStatus = reel:AddLabel({ Title = "Status", Description = "idle", Icon = "info" });
-		reel:AddSlider({ Title = "Look-ahead (ms)", Description = "Higher = reacts earlier. Try 100-250", Min = 0, Max = 500, Step = 10, Default = x.reelLook * 1000, Callback = function(v)
-					x.reelLook = v / 1000;
-					G.saveSettings();
-				end });
-		reel:AddSlider({ Title = "Braking", Description = "Higher = slows down sooner", Min = .3, Max = 3, Step = .05, Default = x.reelBrake, Callback = function(v)
-					x.reelBrake = v;
-					G.saveSettings();
-				end });
-		reel:AddSlider({ Title = "Fish lead", Description = "How far ahead of the fish to aim", Min = 0, Max = 1.5, Step = .05, Default = x.reelFishLead, Callback = function(v)
-					x.reelFishLead = v;
-					G.saveSettings();
-				end });
-		reel:AddDropdown({ Title = "Reel input", Description = "Space bar or left mouse", Options = { "Space", "Mouse" }, Default = x.reelInput, Callback = function(v)
-					x.reelInput = v;
-					a.setHold(false);
-					G.saveSettings();
-				end });
-		local monster = ui:AddTab({ Title = "Monster", Icon = "power" });
-		monster:AddToggle({
-			Title = "Fight sea monsters",
-			Description = "While fishing, kill fishmen that show up",
-			Default = x.fightMobs,
-			Callback = function(t)
-				x.fightMobs = t;
-				G.saveSettings();
-			end,
-		});
-		monster:AddToggle({
-			Title = "Return to fishing spot",
-			Description = "TP back to where fishing started",
-			Default = x.fightReturn,
-			Callback = function(t)
-				x.fightReturn = t;
-				G.saveSettings();
-			end,
-		});
-		monster:_add("keybind", { Title = "Weapon slot", Description = "Click, then press the hotbar key", Custom = true, Default = x.weaponKey, Callback = function(k)
-					x.weaponKey = k;
-					G.saveSettings();
-				end });
-		slider(monster, "fightRange", "Detect range", 10, 300, 5, "How far away to notice a monster");
 		ee.toggle = fish:AddToggle({ Title = "Auto Fish", Description = "Hotkey: F1", Default = false, Callback = function(t)
 					L(t);
 				end });
@@ -3307,6 +3176,10 @@ end;
 		});
 		ee.rodKey = fish:_add("keybind", { Title = "Rod slot", Description = "Click, then press the hotbar key", Custom = true, Default = x.rodKey, Callback = function(k)
 					x.rodKey = k;
+					G.saveSettings();
+				end });
+		ee.weaponKey = fish:_add("keybind", { Title = "Weapon slot", Description = "Used to fight fishfolk while fishing", Custom = true, Default = x.weaponKey, Callback = function(k)
+					x.weaponKey = k;
 					G.saveSettings();
 				end });
 		slider(fish, "castPct", "Release at", 1, 100, 1, "Cast power release, in %");
@@ -3371,7 +3244,7 @@ end;
 		ee.espCount = esp:AddLabel({ Title = "0 found", Description = "ESP targets currently detected", Icon = "info" });
 		local settingsTab = ui.Settings;
 		settingsTab:AddLabel({ Title = "Version " .. G.VERSION, Description = G.UPDATED .. " - " .. G.NOTE, Icon = "info" });
-		ui.Tabs = { fish, reel, monster, mine, farm, esp, settingsTab };
+		ui.Tabs = { fish, mine, farm, esp, settingsTab };
 		fish:Select();
 	end;
 function G.unload()
@@ -3478,16 +3351,6 @@ do
 			pcall(function()
 				ee.chickenToggle:Set(m.running and true or false, true);
 			end);
-		end;
-		if ee.reelStatus and tick() - (ee.statusAt or 0) > .25 then
-			ee.statusAt = tick();
-			local st = K.running and K.status or (w.running and w.status) or (m.running and m.status) or "idle";
-			if st ~= ee.statusShown then
-				ee.statusShown = st;
-				pcall(function()
-					ee.reelStatus:SetDescription(tostring(st));
-				end);
-			end;
 		end;
 		if ee.espCount and F.count ~= ee.espShown then
 			ee.espShown = F.count;
