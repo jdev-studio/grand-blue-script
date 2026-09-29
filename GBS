@@ -12,6 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
+G.VERSION = "1.0.1";
+G.UPDATED = "2026-09-29";
+G.NOTE = "Shake aim fix for other screens";
 pcall(function()
 	setrobloxinput(true);
 end);
@@ -577,6 +580,40 @@ local T = {
 		sizes = {},
 	};
 T.SCAN_MS = 12;
+T.sx, T.sy, T.ox, T.oy = 1, 1, 0, 0;
+function T.cmdFor(cx, cy)
+	return (cx - T.ox) / T.sx, (cy - T.oy) / T.sy;
+end;
+function T.moveTo(cx, cy)
+	local rx, ry = g.readMouse();
+	T.prevRead = rx and { rx, ry } or nil;
+	local mx, my = T.cmdFor(cx, cy);
+	T.lastCmd = { mx, my };
+	g.moveTo(mx, my);
+end;
+function T.learn(rx, ry)
+	local c = T.lastCmd;
+	if not c then
+		return;
+	end;
+	local p = T.sample;
+	if p then
+		if math.abs(c[1] - p[1]) > 80 then
+			local s = (rx - p[3]) / (c[1] - p[1]);
+			if s > .5 and s < 2 then
+				T.sx = (T.sx + s) / 2;
+			end;
+		end;
+		if math.abs(c[2] - p[2]) > 80 then
+			local s = (ry - p[4]) / (c[2] - p[2]);
+			if s > .5 and s < 2 then
+				T.sy = (T.sy + s) / 2;
+			end;
+		end;
+	end;
+	T.ox, T.oy = rx - T.sx * c[1], ry - T.sy * c[2];
+	T.sample = { c[1], c[2], rx, ry };
+end;
 function T.findButton(t)
 	if T.scanAt and t - T.scanAt < T.SCAN_MS then
 		return T.scanBtn, T.scanAgain;
@@ -675,7 +712,7 @@ function T.step(t)
 		end;
 		T.target, T.fixes = o, 0;
 		local G = math.min(12, o.w / 5);
-		g.moveTo((o.cx + T.calX) + G, (o.cy + T.calY) + G);
+		T.moveTo(o.cx + G, o.cy + G);
 		T.stage, T.actAt = "APPROACH", t + x.settleMs;
 		K.status = string.format("shake: aim %d,%d", o.cx, o.cy);
 		return;
@@ -684,7 +721,7 @@ function T.step(t)
 		if t < T.actAt then
 			return;
 		end;
-		g.moveTo(o.cx + T.calX, o.cy + T.calY);
+		T.moveTo(o.cx, o.cy);
 		T.stage, T.actAt = "AIM", t + x.settleMs;
 		return;
 	end;
@@ -692,16 +729,24 @@ function T.step(t)
 		return;
 	end;
 	local Q, e = g.readMouse();
-	local v = Q and (math.abs(Q - o.cx) <= 6 and math.abs(e - o.cy) <= 6);
-	if Q and (not v and T.fixes < x.maxAimFixes) then
-		T.calX = T.calX + ((o.cx - Q));
-		T.calY = T.calY + ((o.cy - e));
-		T.fixes = T.fixes + 1;
-		g.moveTo(o.cx + T.calX, o.cy + T.calY);
-		T.actAt = t + x.settleMs;
-		return;
-	end;
-	T.liveW = o.w;
+		if Q then
+			local off = math.abs(Q - o.cx) > 6 or math.abs(e - o.cy) > 6;
+			local stale = T.prevRead and (Q == T.prevRead[1] and (e == T.prevRead[2] and off));
+			if stale and (T.staleTries or 0) < 8 then
+				T.staleTries = (T.staleTries or 0) + 1;
+				T.actAt = t + x.settleMs;
+				return;
+			end;
+			T.staleTries = 0;
+			T.learn(Q, e);
+			if off and T.fixes < math.max(5, x.maxAimFixes) then
+				T.fixes = T.fixes + 1;
+				T.moveTo(o.cx, o.cy);
+				T.actAt = t + x.settleMs;
+				return;
+			end;
+		end;
+		T.liveW = o.w;
 	g.press();
 	T.stage, T.actAt = "HOLD", t + x.clickHoldMs;
 	K.status = string.format("shake: click #%d", K.shakes + 1);
@@ -3271,6 +3316,7 @@ end;
 		});
 		ee.espCount = esp:AddLabel({ Title = "0 found", Description = "ESP targets currently detected", Icon = "info" });
 		local settingsTab = ui.Settings;
+		settingsTab:AddLabel({ Title = "Version " .. G.VERSION, Description = G.UPDATED .. " - " .. G.NOTE, Icon = "info" });
 		ui.Tabs = { fish, monster, mine, farm, esp, settingsTab };
 		fish:Select();
 	end;
@@ -3429,4 +3475,9 @@ end;
 G.GUI = q;
 G.S, G.CONFIG, G.SHAKE, G.REEL, G.MINE, G.FARM, G.ESP = K, x, T, a, w, m, F;
 G.TREASURE = Be;
-notify(Qe and "Loaded. F1 Fish, F2 Mine, F4 Chickens, END hides the menu.", 4);
+notify(Qe and ("v" .. G.VERSION .. " loaded. F1 Fish, F2 Mine, F4 Chickens, END hides the menu.") or ("v" .. G.VERSION .. " loaded (menu failed to start)"), 4);
+if Qe then
+	pcall(function()
+		Qe:Notify({ Title = "Grand Blue v" .. G.VERSION, Content = G.NOTE, Type = "success", Duration = 5 });
+	end);
+end;
