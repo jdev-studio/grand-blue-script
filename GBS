@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.1.0";
+G.VERSION = "1.1.1";
 G.UPDATED = "2026-09-29";
-G.NOTE = "Stronger Lock fish with tracking backup";
+G.NOTE = "Lock fish tests whether to move the fish or the bar";
 pcall(function()
 	setrobloxinput(true);
 end);
@@ -752,6 +752,7 @@ function T.step(t)
 	T.stage, T.actAt = "DOWN", t;
 	K.status = string.format("shake: click #%d", K.shakes + 1);
 end;
+local lockMode, lockTries = nil, 0;
 local a = {};
 function a.reset()
 	a.t, a.bc, a.fc = nil, 0, 0;
@@ -762,7 +763,10 @@ function a.reset()
 	a.geo = nil;
 	a.safeAt, a.hovering = nil, false;
 	a.disc, a.geoFailAt = nil, nil;
-	a.lk, a.lkN, a.lkIn = nil, 0, 0;
+	a.lk, a.lkN, a.lkIn, a.pr = nil, 0, 0, nil;
+	if lockMode == "none" and lockTries < 3 then
+		lockMode = nil;
+	end;
 end;
 a.reset();
 local N = 2.0;
@@ -838,11 +842,6 @@ function a.pinFish(t, o, B, G, x, Q, e, v, k)
 				a.pinValid = true;
 			end;
 			local M = Q / G;
-			local b = (((J * ((1 - q)) + q / 2) - M / 2)) / ((1 - M));
-			if k then
-				b = J * ((1 - q)) + q / 2 < .5 and 1 or 0;
-			end;
-			memory_write("float", S + Y, math.max(0, math.min(1, b)));
 			a.lk = { fa = S, ma = r, M = M, t = tick() };
 			return true;
 		end);
@@ -857,15 +856,75 @@ function a.lockTick()
 		a.lk = nil;
 		return;
 	end;
+	if lockMode ~= "fish" and lockMode ~= "bar" then
+		return;
+	end;
 	pcall(function()
 		local J = memory_read("float", lk.ma + Y);
 		local sz = memory_read("float", lk.ma + W);
 		if type(J) ~= "number" or type(sz) ~= "number" or J ~= J or sz ~= sz or sz <= 0 or sz >= 1 then
 			return;
 		end;
-		local b = ((J * (1 - sz) + sz / 2) - lk.M / 2) / (1 - lk.M);
-		memory_write("float", lk.fa + Y, math.max(0, math.min(1, b)));
+		if lockMode == "fish" then
+			local b = ((J * (1 - sz) + sz / 2) - lk.M / 2) / (1 - lk.M);
+			memory_write("float", lk.fa + Y, math.max(0, math.min(1, b)));
+		else
+			local f = memory_read("float", lk.fa + Y);
+			if type(f) ~= "number" or f ~= f then
+				return;
+			end;
+			local fc = f * (1 - lk.M) + lk.M / 2;
+			memory_write("float", lk.ma + Y, math.max(0, math.min(1, (fc - sz / 2) / (1 - sz))));
+		end;
 	end);
+end;
+function a.probe(t)
+	local lk = a.lk;
+	if not lk then
+		return;
+	end;
+	local p = a.pr;
+	local function rd(addr)
+		local ok, v = pcall(memory_read, "float", addr);
+		if ok and type(v) == "number" and v == v then
+			return v;
+		end;
+		return nil;
+	end;
+	local function nudge(what)
+		local addr = what == "fish" and lk.fa + Y or lk.ma + Y;
+		local v0 = rd(addr);
+		if not v0 then
+			return false;
+		end;
+		local v = v0 < .5 and v0 + .25 or v0 - .25;
+		if not pcall(memory_write, "float", addr, v) then
+			return false;
+		end;
+		a.pr = { what = what, addr = addr, v0 = v0, v = v, at = t };
+		return true;
+	end;
+	if not p then
+		nudge("fish");
+		return;
+	end;
+	if t - p.at < 90 then
+		return;
+	end;
+	local cur = rd(p.addr);
+	if cur and math.abs(cur - p.v) < math.abs(cur - p.v0) then
+		lockMode = p.what;
+		a.pr = nil;
+		pcall(notify, p.what == "fish" and "Lock fish: the game follows the fish, holding it on the bar" or "Lock fish: the game follows the bar, holding the bar on the fish", 4);
+		return;
+	end;
+	if p.what == "fish" and nudge("bar") then
+		return;
+	end;
+	a.pr = nil;
+	lockMode = "none";
+	lockTries = lockTries + 1;
+	pcall(notify, "Lock fish: the game keeps the positions to itself, so it can't be locked. Using tracking.", 5);
 end;
 function a.ensureLoop()
 	if a.lockLoop then
@@ -956,6 +1015,7 @@ function a.locate(t, o, B, G, x, Q, e, v)
 		end;
 		W = newW;
 		a.pinValid, a.pinFails, a.disc = nil, 0, nil;
+		lockMode, lockTries = nil, 0;
 		pcall(notify, "Lock fish offsets re-detected", 4);
 		local gg = _G.GrandBlueFishMine;
 		if gg and gg.saveSettings then
@@ -1054,16 +1114,28 @@ function a.step(t)
 			bw = j,
 		};
 	local locked = false;
-	if x.freezeFish then
-		locked = a.pinFish(B, G, k, q, M, P, O, j, Q) and true or false;
-		if locked then
+	local lockNote = "tracking";
+	if x.freezeFish and a.pinFish(B, G, k, q, M, P, O, j, Q) then
+		if lockMode == nil then
+			lockNote = "testing lock";
+			if t - K.phaseAt > 300 then
+				a.probe(t);
+			end;
+		elseif lockMode == "fish" or lockMode == "bar" then
+			locked = true;
+			lockNote = "locked (" .. lockMode .. ")";
+			a.lockTick();
 			a.ensureLoop();
 			local fc = M + P / 2;
 			a.lkN = (a.lkN or 0) + 1;
 			if fc >= O and fc <= O + j then
 				a.lkIn = (a.lkIn or 0) + 1;
 			end;
+		else
+			lockNote = "tracking (lock not possible)";
 		end;
+	elseif x.freezeFish and a.pinValid == false then
+		lockNote = "tracking (lock unavailable)";
 	end;
 	if x.freezeFish and a.pinValid ~= true and a.disc ~= false then
 		a.locate(B, G, k, q, M, P, O, j);
@@ -1136,7 +1208,7 @@ function a.step(t)
 		K.lastProgress = T;
 		K.reelProgressSeen = true;
 	end;
-	K.status = string.format("reeling %d%% %s%s", math.floor(((K.lastProgress or 0)) * 100), locked and "locked" or (a.pinValid == false and "tracking (lock unavailable)" or "tracking"), e);
+	K.status = string.format("reeling %d%% %s%s", math.floor(((K.lastProgress or 0)) * 100), lockNote, e);
 end;
 local function C()
 	T.reset();

@@ -2,6 +2,10 @@
 
 The current version is shown in the menu under Settings, and in the notification when the script loads.
 
+## 1.1.1 - 2026-09-29
+
+- Lock fish now tests which position the game actually reads. Early in the first reel it nudges the fish, then the bar, and checks whether the game keeps the change. It then holds whichever one the game follows on top of the other, so both sit at the same spot. If neither sticks it falls back to tracking and tries the test again on the next two reels. A notification says which one it found.
+
 ## 1.1.0 - 2026-09-29
 
 - Lock fish: the fish position was only written once per script update and the mouse was let go while locked, so when the game moved the fish in between, it slipped away and nothing brought the bar back. The position is now rewritten continuously (every render, physics and heartbeat step plus its own loop), and the bar keeps tracking the fish as a backup while locked.
@@ -50,6 +54,10 @@ The current version is shown in the menu under Settings, and in the notification
 ## 1.0.2 - 2026-09-29
 
 - Shake aiming no longer gets thrown off when the game reports the cursor position late (seen on a slower laptop at about 44 fps). It now waits for the reading to settle before trusting it, and undoes any correction that makes the aim worse.
+
+## 1.1.1 - 2026-09-29
+
+- Lock fish now tests which position the game actually reads. Early in the first reel it nudges the fish, then the bar, and checks whether the game keeps the change. It then holds whichever one the game follows on top of the other, so both sit at the same spot. If neither sticks it falls back to tracking and tries the test again on the next two reels. A notification says which one it found.
 
 ## 1.1.0 - 2026-09-29
 
