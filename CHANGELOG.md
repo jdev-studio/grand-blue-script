@@ -6,6 +6,12 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.0.6 - 2026-09-29
+
+- Fishfolk fights now carry on until the Fishfolk is dead (removed, marked Dead or at 0 health), with a 3 minute safety limit. They used the chicken farm's give-up rule, which ended the fight after 6 seconds without getting closer and then restarted it 30 seconds later.
+- At the start of a fight the script notes the rod you're holding and finds its hotbar number, switches to the Weapon slot (or puts the rod away and fights with fists if no weapon is set), and switches back to the rod afterwards before carrying on fishing.
+- The Auto equip rod toggle and Rod slot setting are removed.
+
 ## 1.0.5c - 2026-09-29
 
 - Tracking is removed; Lock fish is the only reel method and is always on (the toggle is gone).

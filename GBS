@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.5c";
+G.VERSION = "1.0.6";
 G.UPDATED = "2026-09-29";
-G.NOTE = "Lock fish only, locks from the first frame";
+G.NOTE = "Fishfolk fights until it's dead";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -1096,12 +1096,12 @@ function eq.load()
 				return;
 			end;
 			eq.saved = d;
-			for _, key in ipairs({ "rodKey", "pickKey", "weaponKey" }) do
+			for _, key in ipairs({ "pickKey", "weaponKey" }) do
 				if type(d[key]) == "number" then
 					x[key] = d[key];
 				end;
 			end;
-			for _, key in ipairs({ "autoEquipRod", "autoEquipPick" }) do
+			for _, key in ipairs({ "autoEquipPick" }) do
 				if type(d[key]) == "boolean" then
 					x[key] = d[key];
 				end;
@@ -1159,10 +1159,6 @@ local function L(t)
 	end;
 	K.recastAt = 0;
 	K.status = t and "starting" or "idle";
-	if t and (x.rodKey and x.autoEquipRod) then
-		eq.ensure("rod", x.rodKey);
-		K.recastAt = k() + 900;
-	end;
 	if t and G.setMining then
 		G.setMining(false);
 	end;
@@ -1804,7 +1800,7 @@ function m.step(t)
 	if S < m.bestDist - .5 then
 		m.bestDist, m.progressAt = S, t;
 	end;
-	if S > x.farmAttackRange and t - m.progressAt > x.farmGiveUpMs then
+	if S > x.farmAttackRange and t - m.progressAt > x.farmGiveUpMs and e ~= m.fightTarget then
 		m.blacklist[e] = t + 20000;
 		m.target = nil;
 		m.releaseAll();
@@ -1828,7 +1824,7 @@ function m.step(t)
 			m.pressAt = t;
 		end;
 		m.bestDist, m.progressAt, m.navBest = S, t, nil;
-		m.status = string.format("attacking chicken (%.1f studs)", S);
+		m.status = string.format("attacking %s (%.1f studs)", e == m.fightTarget and "fishfolk" or "chicken", S);
 		return;
 	end;
 	if m.attacking then
@@ -1852,7 +1848,82 @@ function fm.alive(e)
 	local ok, parent, dead = pcall(function()
 			return e.Parent, e:GetAttribute("Dead");
 		end);
-	return ok and (parent ~= nil and not dead);
+	if not (ok and parent ~= nil and not dead) then
+		return false;
+	end;
+	local hum = S(e, "Humanoid");
+	local okh, hp = pcall(function()
+			return hum.Health;
+		end);
+	if hum and okh and type(hp) == "number" and hp <= 0 then
+		return false;
+	end;
+	return true;
+end;
+function fm.heldName()
+	local p = r();
+	local c = p and p.Character;
+	local ok, held = pcall(function()
+			return c:GetAttribute("HeldItemName");
+		end);
+	if ok and held ~= nil and tostring(held) ~= "" then
+		return tostring(held);
+	end;
+	local tool = equippedTool();
+	return tool and tool.Name or nil;
+end;
+function fm.findSlot(name)
+	if not name or name == "" then
+		return nil;
+	end;
+	local pg = S(r(), "PlayerGui");
+	local ok, list = pcall(function()
+			return pg:GetDescendants();
+		end);
+	if not ok or type(list) ~= "table" then
+		return nil;
+	end;
+	local function isText(inst)
+		local okc, cls = pcall(function()
+				return inst.ClassName;
+			end);
+		return okc and (cls == "TextLabel" or cls == "TextButton");
+	end;
+	local function text(inst)
+		local okt, s = pcall(function()
+				return inst.Text;
+			end);
+		return okt and type(s) == "string" and s or nil;
+	end;
+	for _, dsc in ipairs(list) do
+		if isText(dsc) then
+			local s = text(dsc);
+			if s and s ~= "" and (s == name or string.find(s, name, 1, true)) then
+				local box = dsc;
+				for _ = 1, 3 do
+					local okp, parent = pcall(function()
+							return box.Parent;
+						end);
+					box = okp and parent or nil;
+					if not box then
+						break;
+					end;
+					local okk, kids = pcall(function()
+							return box:GetDescendants();
+						end);
+					for _, c in ipairs(okk and kids or {}) do
+						if isText(c) then
+							local n = text(c);
+							if n and string.match(n, "^%s*%d%s*$") then
+								return string.byte(string.match(n, "%d"));
+							end;
+						end;
+					end;
+				end;
+			end;
+		end;
+	end;
+	return nil;
 end;
 function fm.markHome()
 	local root = l();
@@ -1938,30 +2009,71 @@ function fm.begin(mob, name, t)
 	m.attacking, m.hitSince, m.fightTarget = false, 0, mob;
 	K.status = "fighting " .. tostring(name);
 	pcall(notify, "Fighting " .. tostring(name), 2);
-	if x.weaponKey and not fm.equipBusy then
-		fm.equipBusy = true;
-		task.spawn(function()
-			pcall(function()
-				local cur = equippedTool();
-				if not cur or eq.matches("rod", cur) then
-					tapKey(x.weaponKey);
-					task.wait(.35);
-				end;
-			end);
-			fm.equipBusy = false;
-		end);
+	if fm.equipBusy then
+		return;
 	end;
+	fm.equipBusy = true;
+	task.spawn(function()
+		pcall(function()
+			local held = fm.heldName();
+			if held and string.find(string.lower(held), "rod", 1, true) then
+				fm.rodName = held;
+				fm.rodKey = fm.findSlot(held) or fm.rodKey;
+			end;
+			if x.weaponKey then
+				if not held or string.find(string.lower(held), "rod", 1, true) then
+					tapKey(x.weaponKey);
+					task.wait(.4);
+				end;
+			elseif held and string.find(string.lower(held), "rod", 1, true) then
+				if fm.rodKey then
+					tapKey(fm.rodKey);
+					task.wait(.4);
+				end;
+				if not fm.warnedFists then
+					fm.warnedFists = true;
+					pcall(notify, "No Weapon slot set, fighting with fists. Set one on the Fish tab to use a weapon.", 5);
+				end;
+			end;
+			local now = fm.heldName();
+			if now and string.find(string.lower(now), "rod", 1, true) then
+				pcall(notify, "Couldn't put the rod away, so the fight may cast instead of attack", 4);
+			end;
+		end);
+		fm.equipBusy = false;
+	end);
 end;
 function fm.finish(t)
 	m.releaseAll();
 	m.fightTarget = nil;
 	fm.state, fm.fighting, fm.mob = nil, false, nil;
 	C();
-	K.recastAt = t + 1300;
+	K.recastAt = t + 1500;
 	K.status = "back to fishing";
-	if x.rodKey then
-		eq.ensure("rod", x.rodKey);
-	end;
+	task.spawn(function()
+		pcall(function()
+			local held = fm.heldName();
+			if held and string.find(string.lower(held), "rod", 1, true) then
+				return;
+			end;
+			local key = fm.rodKey or (fm.rodName and fm.findSlot(fm.rodName));
+			if not key then
+				pcall(notify, "Couldn't find your rod on the hotbar, equip it to keep fishing", 5);
+				return;
+			end;
+			tapKey(key);
+			task.wait(.4);
+			local now = fm.heldName();
+			if not (now and string.find(string.lower(now), "rod", 1, true)) then
+				tapKey(key);
+				task.wait(.4);
+				now = fm.heldName();
+			end;
+			if not (now and string.find(string.lower(now), "rod", 1, true)) then
+				pcall(notify, "Couldn't switch back to the rod, equip it to keep fishing", 5);
+			end;
+		end);
+	end);
 end;
 function fm.beginReturn(t)
 	m.releaseAll();
@@ -1987,17 +2099,25 @@ function fm.step(t)
 	fm.trackHealth(t);
 	if fm.state == "FIGHT" then
 		local mob = fm.mob;
-		if not fm.alive(mob) or t - fm.startedAt > 45000 then
+		if not fm.alive(mob) or t - fm.startedAt > 180000 then
 			if fm.alive(mob) then
 				K.status = "gave up on monster";
+				pcall(notify, "Fight took over 3 minutes, going back to fishing", 4);
 			else
 				K.status = "monster down";
+				pcall(notify, "Fishfolk down, going back to fishing", 3);
 			end;
 			fm.beginReturn(t);
 			return true;
 		end;
+		if fm.equipBusy then
+			m.releaseAll();
+			K.status = "switching to weapon";
+			return true;
+		end;
 		m.target, m.fightTarget = mob, mob;
 		m.step(t);
+		K.status = m.status;
 		if m.target ~= mob then
 			fm.beginReturn(t);
 		end;
@@ -3206,9 +3326,7 @@ end;
 					menuKey = ui.Keybind,
 					theme = ui.Theme,
 					castPct = x.castPct,
-					autoEquipRod = x.autoEquipRod and true or false,
 					autoEquipPick = x.autoEquipPick and true or false,
-					rodKey = x.rodKey,
 					pickKey = x.pickKey,
 					weaponKey = x.weaponKey,
 					lockPos = Y,
@@ -3281,20 +3399,7 @@ end;
 		ee.toggle = fish:AddToggle({ Title = "Auto Fish", Description = "Hotkey: F1", Default = false, Callback = function(t)
 					L(t);
 				end });
-		fish:AddToggle({
-			Title = "Auto equip rod",
-			Description = "Equip the rod slot when Auto Fish starts",
-			Default = x.autoEquipRod and true or false,
-			Callback = function(t)
-				x.autoEquipRod = t;
-				G.saveSettings();
-			end,
-		});
-		ee.rodKey = fish:_add("keybind", { Title = "Rod slot", Description = "Click, then press the hotbar key", Custom = true, Default = x.rodKey, Callback = function(k)
-					x.rodKey = k;
-					G.saveSettings();
-				end });
-		ee.weaponKey = fish:_add("keybind", { Title = "Weapon slot", Description = "Used to fight fishfolk while fishing", Custom = true, Default = x.weaponKey, Callback = function(k)
+		ee.weaponKey = fish:_add("keybind", { Title = "Weapon slot", Description = "Weapon for fishfolk fights (fists if unset)", Custom = true, Default = x.weaponKey, Callback = function(k)
 					x.weaponKey = k;
 					G.saveSettings();
 				end });
