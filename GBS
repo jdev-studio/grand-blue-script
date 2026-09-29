@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.4c";
+G.VERSION = "1.0.4d";
 G.UPDATED = "2026-09-29";
-G.NOTE = "Messages also print to the console";
+G.NOTE = "More accurate Lock fish test, bar first";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -901,10 +901,11 @@ function a.lockTick()
 end;
 function a.probe(t)
 	local lk = a.lk;
-	if not lk then
+	if not lk or a.pr then
 		return;
 	end;
-	local p = a.pr;
+	local token = {};
+	a.pr = token;
 	local function rd(addr)
 		local ok, v = pcall(memory_read, "float", addr);
 		if ok and type(v) == "number" and v == v then
@@ -912,41 +913,64 @@ function a.probe(t)
 		end;
 		return nil;
 	end;
-	local function nudge(what)
+	local function alive()
+		return a.pr == token and a.lk ~= nil and K.phase == "REEL" and not G.dead;
+	end;
+	local function test(what)
 		local addr = what == "fish" and lk.fa + Y or lk.ma + Y;
-		local v0 = rd(addr);
-		if not v0 then
-			return false;
+		local s0, t0 = rd(addr), tick();
+		task.wait(.03);
+		local s1, t1 = rd(addr), tick();
+		if not (s0 and s1) or not alive() then
+			return nil;
 		end;
-		local v = v0 < .5 and v0 + .25 or v0 - .25;
+		local vel = t1 > t0 and (s1 - s0) / (t1 - t0) or 0;
+		local v = s1 < .5 and s1 + .25 or s1 - .25;
 		if not pcall(memory_write, "float", addr, v) then
-			return false;
+			return nil;
 		end;
-		a.pr = { what = what, addr = addr, v0 = v0, v = v, at = t };
-		return true;
+		local tw = tick();
+		local kept, undone, last = 0, 0, nil;
+		while tick() - tw < .15 and alive() do
+			task.wait();
+			local c = rd(addr);
+			if c then
+				local dt = tick() - tw;
+				if math.abs(c - (v + vel * dt)) < math.abs(c - (s1 + vel * (dt + (tw - t1)))) then
+					kept = kept + 1;
+				else
+					undone = undone + 1;
+				end;
+				last = c;
+			end;
+		end;
+		pcall(G.log, string.format("lock test %s: was %.3f moving %.2f/s, nudged to %.3f, then %s. %d reads kept it, %d put it back", what, s1, vel, v, last and string.format("%.3f", last) or "unreadable", kept, undone));
+		return kept >= 2 and kept > undone * 2;
 	end;
-	if not p then
-		nudge("fish");
-		return;
-	end;
-	if t - p.at < 90 then
-		return;
-	end;
-	local cur = rd(p.addr);
-	pcall(G.log, string.format("lock test %s: was %.3f, nudged to %.3f, %d ms later %s", p.what, p.v0, p.v, math.floor(t - p.at), cur and string.format("%.3f", cur) or "unreadable"));
-	if cur and math.abs(cur - p.v) < math.abs(cur - p.v0) then
-		lockMode = p.what;
+	task.spawn(function()
+		local mode = "none";
+		if test("bar") then
+			mode = "bar";
+		elseif alive() and test("fish") then
+			mode = "fish";
+		end;
+		if a.pr ~= token then
+			return;
+		end;
 		a.pr = nil;
-		pcall(notify, p.what == "fish" and "Lock fish: the game follows the fish, holding it on the bar" or "Lock fish: the game follows the bar, holding the bar on the fish", 4);
-		return;
-	end;
-	if p.what == "fish" and nudge("bar") then
-		return;
-	end;
-	a.pr = nil;
-	lockMode = "none";
-	lockTries = lockTries + 1;
-	pcall(notify, "Lock fish: the game keeps the positions to itself, so it can't be locked. Using tracking.", 5);
+		if not a.lk then
+			return;
+		end;
+		lockMode = mode;
+		if mode == "bar" then
+			pcall(notify, "Lock fish: the game follows the bar, holding the bar on the fish", 4);
+		elseif mode == "fish" then
+			pcall(notify, "Lock fish: the game follows the fish, holding it on the bar", 4);
+		else
+			lockTries = lockTries + 1;
+			pcall(notify, "Lock fish: the game keeps the positions to itself, so it can't be locked. Using tracking.", 5);
+		end;
+	end);
 end;
 function a.ensureLoop()
 	if a.lockLoop then
