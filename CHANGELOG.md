@@ -6,6 +6,11 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.0.4e - 2026-09-29
+
+- Lock fish is removed and every reel uses click tracking. Testing showed the game works out catch progress from its own values, not the on-screen positions: holding the bar on the fish lost 4 out of 4 reels at 1-3% progress, while tracking alone caught at 99%. Writing the positions only moved the picture and confused the tracking, which reads the bar and fish from the screen.
+- Reloading the script no longer doubles every console line.
+
 ## 1.0.4d - 2026-09-29
 
 - Lock fish test is more accurate. It used to take one reading some time after the nudge, which could land 300+ ms late while the bar or fish had already moved on its own. It now measures each part's speed first, then reads every frame for 0.15 s after the nudge and counts whether the game kept the change or put it back.

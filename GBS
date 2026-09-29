@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.4d";
+G.VERSION = "1.0.4e";
 G.UPDATED = "2026-09-29";
-G.NOTE = "More accurate Lock fish test, bar first";
+G.NOTE = "Lock fish removed, reel uses tracking";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -28,7 +28,8 @@ function G.log(msg)
 	pcall(writefile, "grandblue_log.txt", table.concat(L, "\n"));
 end;
 do
-	local rawNotify = notify;
+	local rawNotify = rawget(_G, "__gbsRawNotify") or notify;
+	rawset(_G, "__gbsRawNotify", rawNotify);
 	notify = function(msg, d)
 		pcall(G.log, msg);
 		if type(rawNotify) == "function" then
@@ -52,7 +53,7 @@ local x = {
 		stableMs = 20,
 		maxAimFixes = 3,
 		reelInput = "Mouse",
-		freezeFish = true,
+		freezeFish = false,
 		mineAutoSwing = true,
 		mineSwingDelayMs = 400,
 		mineStartTimeoutMs = 2500,
@@ -1303,7 +1304,7 @@ function eq.load()
 					x[key] = d[key];
 				end;
 			end;
-			for _, key in ipairs({ "freezeFish", "autoEquipRod", "autoEquipPick" }) do
+			for _, key in ipairs({ "autoEquipRod", "autoEquipPick" }) do
 				if type(d[key]) == "boolean" then
 					x[key] = d[key];
 				end;
@@ -1377,7 +1378,7 @@ local function I(t)
 	a.setHold(false);
 	local prog = K.lastProgress or 0;
 	local pct = (a.lkN or 0) >= 5 and math.floor((a.lkIn or 0) / a.lkN * 100 + .5) or nil;
-	pcall(notify, string.format("Reel %s at %d%% progress. Lock: %s%s", prog >= .5 and "caught" or "lost", math.floor(prog * 100), tostring(lockMode or (x.freezeFish and "not tested yet" or "off")), pct and string.format(", fish on the bar %d%% of the reel", pct) or ""), 4);
+	pcall(notify, string.format("Reel %s at %d%% progress", prog >= .5 and "caught" or "lost", math.floor(prog * 100)), 4);
 	a.lk = nil;
 	if ((K.lastProgress or 0)) >= .5 then
 		K.caught = K.caught + 1;
@@ -3502,15 +3503,6 @@ end;
 					G.saveSettings();
 				end });
 		slider(fish, "castPct", "Release at", 1, 100, 1, "Cast power release, in %");
-		fish:AddToggle({
-			Title = "Lock fish",
-			Description = "Freeze the fish while reeling",
-			Default = x.freezeFish,
-			Callback = function(t)
-				x.freezeFish = t;
-				G.saveSettings();
-			end,
-		});
 		ee.mineToggle = mine:AddToggle({ Title = "Auto Mine", Description = "Hotkey: F2", Default = false, Callback = function(t)
 					G.setMining(t);
 				end });
