@@ -6,6 +6,12 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.0.5b - 2026-09-29
+
+- Lock fish is back (Fish tab, on by default) and works like the original script: no clicking during the reel, so the bar rests at the far left, and the fish is written onto the bar's position on every render, physics and heartbeat step plus its own loop. In 1.0.4 tracking kept running while locked, which kept the bar moving and made the lock look worse than it was. If the lock can't engage at all in a reel it says so and tracks for that reel.
+- Tracking (Lock fish off) ignores readings that jump much further than normal for up to 3 frames and keeps steering on its prediction, and caps bar speed, fish speed and the learned bar acceleration, so a single bad frame can't send the bar off in the wrong direction.
+- The reel summary shows how much of the reel the fish was on the bar.
+
 ## 1.0.5 - 2026-09-29
 
 - New reel tracking. The old version worked from raw frame-to-frame speed readings, which are very noisy at low frame rates, and didn't account for its own input delay, so it overshot and swung around the fish. It now smooths the bar and fish positions using the input it knows it's sending, learns how fast the bar speeds up when held and when released, predicts where the bar will be once the next click takes effect, and brakes relative to the fish's own speed. In a simulation at 22 fps the fish stayed in the bar 78% of the time instead of 68%, and the worst case went from 38% to 64%.
