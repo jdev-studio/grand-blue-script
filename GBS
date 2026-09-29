@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.3";
+G.VERSION = "1.0.4";
 G.UPDATED = "2026-09-29";
-G.NOTE = "Shake aim: auto-calibrate UI size";
+G.NOTE = "Reel tuning tab and live status";
 pcall(function()
 	setrobloxinput(true);
 end);
@@ -144,19 +144,14 @@ function q.calibrate()
 				local o, G = pcall(memory_read, "float", x + t);
 				local Q, e = pcall(memory_read, "float", (x + t) + 4);
 				if o and (Q and (type(G) == "number" and (type(e) == "number" and (math.abs(G - B.X) < 1 and (e > B.Y - 120 and e <= B.Y))))) then
-					q.absSize, q.source = t, (string.find(q.source, "measured", 1, true) and q.source or q.source .. " + measured");
+					q.absSize, q.source = t, q.source .. " + measured";
 					return;
 				end;
 			end;
 		end;
 	end;
 end;
-pcall(q.calibrate);
 local function O(t)
-	if not q.checkedAt or tick() - q.checkedAt > 20 then
-		q.checkedAt = tick();
-		pcall(q.calibrate);
-	end;
 	local o, B = t.AbsolutePosition, t.AbsoluteSize;
 	if B and ((B.X >= .5 or B.Y >= .5)) then
 		return o, B;
@@ -846,6 +841,11 @@ function a.pinFish(t, o, B, G, x, Q, e, v, k)
 					a.pinFails = ((a.pinFails or 0)) + 1;
 					if a.pinFails >= 15 then
 						a.pinValid = false;
+						local gg = _G.GrandBlueFishMine;
+						if gg and not gg.pinWarned then
+							gg.pinWarned = true;
+							pcall(notify, "Lock fish unavailable on this client, tracking the fish instead", 5);
+						end;
 					end;
 					return false;
 				end;
@@ -1015,7 +1015,7 @@ function a.step(t)
 		K.lastProgress = T;
 		K.reelProgressSeen = true;
 	end;
-	K.status = string.format("reeling %d%%%s", math.floor(((K.lastProgress or 0)) * 100), e);
+	K.status = string.format("reeling %d%% tracking%s%s", math.floor(((K.lastProgress or 0)) * 100), a.pinValid == false and " (lock unavailable)" or "", e);
 end;
 local function C()
 	T.reset();
@@ -1068,6 +1068,14 @@ function eq.load()
 				if type(d[key]) == "boolean" then
 					x[key] = d[key];
 				end;
+			end;
+			for key, range in pairs({ reelLook = { 0, .6 }, reelBrake = { .3, 3 }, reelFishLead = { 0, 1.5 } }) do
+				if type(d[key]) == "number" then
+					x[key] = math.max(range[1], math.min(range[2], d[key]));
+				end;
+			end;
+			if d.reelInput == "Space" or d.reelInput == "Mouse" then
+				x.reelInput = d.reelInput;
 			end;
 			if type(d.fightRange) == "number" then
 				x.fightRange = math.max(10, math.min(300, d.fightRange));
@@ -2567,6 +2575,7 @@ do
 		local Control={};Control.__index=Control
 		function Control:GetValue() return self.Value end
 		function Control:SetText(text) self.Title=short(text,52);return self end
+		function Control:SetDescription(text) self.Description=short(text,68);return self end
 		function Control:SetValue(value,silent)
 		 if self.Kind=="toggle" then value=not not value
 		 elseif self.Kind=="slider" then value=clamp(tonumber(value) or self.Min,self.Min,self.Max);value=self.Min+math.floor((value-self.Min)/self.Step+0.5)*self.Step;value=clamp(value,self.Min,self.Max)
@@ -3172,6 +3181,10 @@ end;
 					fightMobs = x.fightMobs and true or false,
 					fightReturn = x.fightReturn and true or false,
 					fightRange = x.fightRange,
+					reelLook = x.reelLook,
+					reelBrake = x.reelBrake,
+					reelFishLead = x.reelFishLead,
+					reelInput = x.reelInput,
 					espFruits = F.fruits and true or false,
 					espChests = F.chests and true or false,
 					espTreasure = Be.on and true or false,
@@ -3237,6 +3250,25 @@ end;
 		local mine = ui:AddTab({ Title = "Mine", Icon = "layers" });
 		local farm = ui:AddTab({ Title = "Farm", Icon = "shield" });
 		local esp = ui:AddTab({ Title = "ESP", Icon = "spark" });
+		local reel = ui:AddTab({ Title = "Reel", Icon = "sliders" });
+		ee.reelStatus = reel:AddLabel({ Title = "Status", Description = "idle", Icon = "info" });
+		reel:AddSlider({ Title = "Look-ahead (ms)", Description = "Higher = reacts earlier. Try 100-250", Min = 0, Max = 500, Step = 10, Default = x.reelLook * 1000, Callback = function(v)
+					x.reelLook = v / 1000;
+					G.saveSettings();
+				end });
+		reel:AddSlider({ Title = "Braking", Description = "Higher = slows down sooner", Min = .3, Max = 3, Step = .05, Default = x.reelBrake, Callback = function(v)
+					x.reelBrake = v;
+					G.saveSettings();
+				end });
+		reel:AddSlider({ Title = "Fish lead", Description = "How far ahead of the fish to aim", Min = 0, Max = 1.5, Step = .05, Default = x.reelFishLead, Callback = function(v)
+					x.reelFishLead = v;
+					G.saveSettings();
+				end });
+		reel:AddDropdown({ Title = "Reel input", Description = "Space bar or left mouse", Options = { "Space", "Mouse" }, Default = x.reelInput, Callback = function(v)
+					x.reelInput = v;
+					a.setHold(false);
+					G.saveSettings();
+				end });
 		local monster = ui:AddTab({ Title = "Monster", Icon = "power" });
 		monster:AddToggle({
 			Title = "Fight sea monsters",
@@ -3339,7 +3371,7 @@ end;
 		ee.espCount = esp:AddLabel({ Title = "0 found", Description = "ESP targets currently detected", Icon = "info" });
 		local settingsTab = ui.Settings;
 		settingsTab:AddLabel({ Title = "Version " .. G.VERSION, Description = G.UPDATED .. " - " .. G.NOTE, Icon = "info" });
-		ui.Tabs = { fish, monster, mine, farm, esp, settingsTab };
+		ui.Tabs = { fish, reel, monster, mine, farm, esp, settingsTab };
 		fish:Select();
 	end;
 function G.unload()
@@ -3446,6 +3478,16 @@ do
 			pcall(function()
 				ee.chickenToggle:Set(m.running and true or false, true);
 			end);
+		end;
+		if ee.reelStatus and tick() - (ee.statusAt or 0) > .25 then
+			ee.statusAt = tick();
+			local st = K.running and K.status or (w.running and w.status) or (m.running and m.status) or "idle";
+			if st ~= ee.statusShown then
+				ee.statusShown = st;
+				pcall(function()
+					ee.reelStatus:SetDescription(tostring(st));
+				end);
+			end;
 		end;
 		if ee.espCount and F.count ~= ee.espShown then
 			ee.espShown = F.count;
