@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.6";
+G.VERSION = "1.0.7";
 G.UPDATED = "2026-09-29";
-G.NOTE = "Fixed cast timing and shake click";
+G.NOTE = "Shake click fix, reel lock auto-detect";
 pcall(function()
 	setrobloxinput(true);
 end);
@@ -685,6 +685,9 @@ function T.step(t)
 			K.misses = K.misses + 1;
 		end;
 		T.target = o;
+		if g.mouseHeld then
+			g.release();
+		end;
 		T.moveTo(o.cx, o.cy);
 		T.stage, T.actAt = "AIM", t + x.settleMs;
 		K.status = string.format("shake: aim %d,%d", o.cx, o.cy);
@@ -694,7 +697,8 @@ function T.step(t)
 		return;
 	end;
 	T.liveW = o.w;
-	g.press();
+	pcall(mouse1press);
+	g.mouseHeld = true;
 	T.stage, T.actAt = "HOLD", t + x.clickHoldMs;
 	K.status = string.format("shake: click #%d", K.shakes + 1);
 end;
@@ -707,6 +711,7 @@ function a.reset()
 	a.pinValid, a.pinFails = nil, 0;
 	a.geo = nil;
 	a.safeAt, a.hovering = nil, false;
+	a.disc, a.geoFailAt = nil, nil;
 end;
 a.reset();
 local N = 2.0;
@@ -791,6 +796,89 @@ function a.pinFish(t, o, B, G, x, Q, e, v, k)
 		end);
 	return S and r == true;
 end;
+function a.locate(t, o, B, G, x, Q, e, v)
+	if a.disc == false or a.pinValid == true then
+		return;
+	end;
+	if type(memory_read) ~= "function" or type(memory_write) ~= "function" or G - Q < 1 or G - v < 1 then
+		return;
+	end;
+	local sf = (x - B) / (G - Q);
+	local sb = (e - B) / (G - v);
+	local ok, fa, ma = pcall(function()
+			return t.Address, o.Address;
+		end);
+	if not (ok and type(fa) == "number" and type(ma) == "number") then
+		return;
+	end;
+	local d = a.disc;
+	if not d then
+		d = { cand = {}, n = 0, last = sf, frames = 0 };
+		a.disc = d;
+		for off = Y - 160, Y + 160, 4 do
+			local a1, fv = pcall(memory_read, "float", fa + off);
+			local a2, mv = pcall(memory_read, "float", ma + off);
+			if a1 and a2 and type(fv) == "number" and type(mv) == "number" and math.abs(fv - sf) < .02 and math.abs(mv - sb) < .02 then
+				d.cand[off] = true;
+			end;
+		end;
+		return;
+	end;
+	d.frames = d.frames + 1;
+	if d.frames > 900 then
+		a.disc = false;
+		return;
+	end;
+	if math.abs(sf - d.last) < .01 then
+		return;
+	end;
+	d.last = sf;
+	d.n = d.n + 1;
+	local left = 0;
+	for off in pairs(d.cand) do
+		local a1, fv = pcall(memory_read, "float", fa + off);
+		local a2, mv = pcall(memory_read, "float", ma + off);
+		if a1 and a2 and type(fv) == "number" and type(mv) == "number" and math.abs(fv - sf) < .03 and math.abs(mv - sb) < .03 then
+			left = left + 1;
+		else
+			d.cand[off] = nil;
+		end;
+	end;
+	if left == 0 then
+		a.disc = false;
+		return;
+	end;
+	if d.n >= 6 then
+		local best, bd = nil, math.huge;
+		for off in pairs(d.cand) do
+			local dd = math.abs(off - Y);
+			if dd < bd then
+				best, bd = off, dd;
+			end;
+		end;
+		local dW = W - Y;
+		Y = best;
+		local sw = v / G;
+		local newW = Y + dW;
+		local okw, wv = pcall(memory_read, "float", ma + newW);
+		if not (okw and type(wv) == "number" and math.abs(wv - sw) < .01) then
+			for off = Y + 8, Y + 96, 4 do
+				local a3, w2 = pcall(memory_read, "float", ma + off);
+				if a3 and type(w2) == "number" and math.abs(w2 - sw) < .01 then
+					newW = off;
+					break;
+				end;
+			end;
+		end;
+		W = newW;
+		a.pinValid, a.pinFails, a.disc = nil, 0, nil;
+		pcall(notify, "Lock fish offsets re-detected", 4);
+		local gg = _G.GrandBlueFishMine;
+		if gg and gg.saveSettings then
+			gg.saveSettings();
+		end;
+	end;
+end;
 function a.gameHeld(t)
 	if type(memory_read) ~= "function" then
 		return nil;
@@ -870,8 +958,13 @@ function a.step(t)
 	local M, b, P = V(B);
 	local O, Z, j = V(G);
 	if not ((k and (M and O))) or q < 10 then
+		a.geoFailAt = a.geoFailAt or t;
+		if a.hold and t - a.geoFailAt > 120 then
+			a.setHold(false);
+		end;
 		return;
 	end;
+	a.geoFailAt = nil;
 	a.geo = {
 			at = t,
 			mx = k,
@@ -884,6 +977,9 @@ function a.step(t)
 	if x.freezeFish and a.pinFish(B, G, k, q, M, P, O, j, Q) then
 		a.frozen(e);
 		return;
+	end;
+	if x.freezeFish and a.pinValid ~= true and a.disc ~= false then
+		a.locate(B, G, k, q, M, P, O, j);
 	end;
 	local h = (((O + j / 2) - k)) / q;
 	local l = (((M + P / 2) - k)) / q;
@@ -906,9 +1002,6 @@ function a.step(t)
 	a.t, a.bc, a.fc = f, h, l;
 	local E = math.max(a.acc, .3);
 	local X = l + a.vf * x.reelFishLead;
-	if Q then
-		X = l < .5 and 1 or 0;
-	end;
 	local y = ((a.vb * math.abs(a.vb)) / ((2 * E))) * x.reelBrake;
 	local c = (((X - h)) - y) - a.vb * x.reelLook > 0;
 	if a.repressAt then
@@ -1001,6 +1094,10 @@ function eq.load()
 			end;
 			if type(d.castPct) == "number" then
 				x.castPct = math.max(1, math.min(100, d.castPct));
+			end;
+			if type(d.lockPos) == "number" and type(d.lockSize) == "number" then
+				Y = d.lockPos;
+				W = d.lockSize;
 			end;
 		end;
 	end);
@@ -3097,6 +3194,8 @@ end;
 					rodKey = x.rodKey,
 					pickKey = x.pickKey,
 					weaponKey = x.weaponKey,
+					lockPos = Y,
+					lockSize = W,
 					espFruits = F.fruits and true or false,
 					espChests = F.chests and true or false,
 					espTreasure = Be.on and true or false,
