@@ -1,6 +1,6 @@
 # grand-blue-script
 
-Fishing, mining and chicken farming helper for Grand Blue, with its own menu.
+Fishing, mining and chicken farming helper for Grand Blue. The menu is [JDUI](https://github.com/jdev-studio/jdui).
 
 ## Running it
 

@@ -6,6 +6,12 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.0.7 - 2026-09-30
+
+- The menu is now loaded from [JDUI](https://github.com/jdev-studio/jdui) instead of being copied into the script, so menu fixes reach this script straight away. The script is about 700 lines shorter.
+- JDUI is also a newer version of the menu than the old built-in copy: it only touches drawings that actually changed each frame, which is lighter on Matcha.
+- If the menu can't be downloaded the script still runs; the F1 / F2 / F4 hotkeys work without it.
+
 ## 1.0.6b - 2026-09-29
 
 - Performance: Matcha dropped to about 1 FPS while fishing. The 1.0.5c lock writer busy-looped for 10 ms between every yield, which starves an external executor. It's removed, along with the extra Stepped connection; the lock now writes from the main update and a single Heartbeat connection.
