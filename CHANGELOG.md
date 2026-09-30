@@ -6,6 +6,10 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.0.8 - 2026-09-30
+
+- Random casts (Fish tab, on by default): every 3 to 6 casts one is released somewhere between 80% and 92% instead of the perfect zone, and the rest aim within 1% either side of Release at. Lots of perfect casts in a row can get you banned. The log marks the deliberate ones with "off target on purpose".
+
 ## 1.0.7b - 2026-09-30
 
 - Fixed the menu not showing ("menu failed to start"). Matcha drops the value the JDUI loadstring returns, so the script now picks the menu up from `_G.JDUI` instead.

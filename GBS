@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.7b";
+G.VERSION = "1.0.8";
 G.UPDATED = "2026-09-30";
-G.NOTE = "Fix the menu not loading on Matcha";
+G.NOTE = "Random casts so perfects aren't every time";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -41,6 +41,7 @@ end);
 pcall(mouse1release);
 local x = {
 		castPct = 98,
+		castRandom = true,
 		castTimeoutMs = 2500,
 		recastAfterReelMs = 1000,
 		castRepressMs = 250,
@@ -582,12 +583,13 @@ function c.step(t, o)
 		g.press();
 	end;
 	K.status = string.format("charging %d%%", math.floor(B * 100));
-	local e = math.max(.01, math.min(1, x.castPct / 100));
 	local s = c.s;
 	if not s or s.pressAt ~= K.castPressAt then
-		s = { pressAt = K.castPressAt, n = 0, dt = 16 };
+		local target, off = G.pickCastTarget();
+		s = { pressAt = K.castPressAt, n = 0, dt = 16, e = target, off = off };
 		c.s = s;
 	end;
+	local e = s.e;
 	if s.f ~= nil then
 		if math.abs(B - s.f) < 1e-05 then
 			return;
@@ -643,9 +645,22 @@ function c.step(t, o)
 		g.mouseHeld = false;
 		c.sentAt = t;
 		K.lastCastAim = aim;
-		K.status = string.format("cast at %d%% (aimed %.1f%%)", math.floor(B * 100), aim * 100);
+		K.status = string.format("cast at %d%% (aimed %.1f%%%s)", math.floor(B * 100), aim * 100, s.off and ", off target on purpose" or "");
 		E("WAIT");
 	end;
+end;
+function G.pickCastTarget()
+	local base = math.max(.01, math.min(1, x.castPct / 100));
+	if not x.castRandom then
+		return base, false;
+	end;
+	G.castStreak = (G.castStreak or 0) + 1;
+	G.castLimit = G.castLimit or math.random(3, 6);
+	if G.castStreak > G.castLimit then
+		G.castStreak, G.castLimit = 0, math.random(3, 6);
+		return math.random(80, 92) / 100, true;
+	end;
+	return math.max(.01, math.min(1, base + (math.random() - .5) * .02)), false;
 end;
 local T = {
 		stage = "SEEK",
@@ -1083,7 +1098,7 @@ function eq.load()
 					x[key] = d[key];
 				end;
 			end;
-			for _, key in ipairs({ "autoEquipPick" }) do
+			for _, key in ipairs({ "autoEquipPick", "castRandom" }) do
 				if type(d[key]) == "boolean" then
 					x[key] = d[key];
 				end;
@@ -2616,6 +2631,7 @@ end;
 					menuKey = ui.Keybind,
 					theme = ui.Theme,
 					castPct = x.castPct,
+					castRandom = x.castRandom and true or false,
 					autoEquipPick = x.autoEquipPick and true or false,
 					pickKey = x.pickKey,
 					weaponKey = x.weaponKey,
@@ -2694,6 +2710,15 @@ end;
 					G.saveSettings();
 				end });
 		slider(fish, "castPct", "Release at", 1, 100, 1, "Cast power release, in %");
+		fish:AddToggle({
+			Title = "Random casts",
+			Description = "Misses a perfect every 3-6 casts",
+			Default = x.castRandom and true or false,
+			Callback = function(t)
+				x.castRandom = t;
+				G.saveSettings();
+			end,
+		});
 		ee.mineToggle = mine:AddToggle({ Title = "Auto Mine", Description = "Hotkey: F2", Default = false, Callback = function(t)
 					G.setMining(t);
 				end });
