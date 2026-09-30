@@ -6,6 +6,13 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.0.10b - 2026-09-30
+
+- Notices when an ore breaks. A broken ore keeps all its pieces and even still starts a mining bar when you hit it; what changes is that it gets `Mined=true` and its health bar disappears. Walk to ores now watches for both, then moves on to the next ore. The mining status shows the ore's HP while it works.
+- Stays level with the ore. Near an ore it walks straight in without jumping (it used to jump onto the rock and swing above it), and if it ends up on top it steps off and comes back in. It only mines when it's within about 4 studs below to 5 above the ore.
+- Digs through walls. If it stops getting closer for 2 seconds it faces the ore and swings the pickaxe, then carries on walking. After 6 digs with no progress it skips that ore for 2 minutes.
+- Rescans the area straight away when it can't find any ore, instead of waiting up to a minute.
+
 ## 1.0.10 - 2026-09-30
 
 - Auto Mine walks between ores in Anchor Town. Inside the mining area (a border around the island's ores) it goes to the nearest ore, mines it with the normal mining code, and when the ore is gone, marked mined, or out of ore pieces it walks to the next one. Ores it can't reach within 8 seconds are skipped for 2 minutes, and an ore that won't start a mining bar after 3 swings is skipped for a minute. Outside Anchor Town, or with Walk to ores switched off on the Mine tab, mining works exactly as before.
