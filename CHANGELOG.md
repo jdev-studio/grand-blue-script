@@ -6,6 +6,11 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.0.9 - 2026-09-30
+
+- The script no longer clicks game popups. Before every click it checks whether a visible button from another game screen (like the world boss "join?" prompt) is under the cursor. Shake clicks wait until the shake button is clear, casts move the cursor to a clear spot first, and mining and fight clicks are skipped while something is in the way. A notification says what it avoided (at most once every 30 seconds per button).
+- Safer cast timing. The script lets go slightly early to make up for the game's reaction time, which it measures itself. If that measurement went wrong it could let go too early on every cast (around 85%) until you reloaded. The measured delay is now reset whenever Auto Fish is turned on and capped at 35 ms (was 120), and casts aim for 99.5% (was 98%), right where the bar turns around, so an early or late release still lands in the 96-100% perfect zone.
+
 ## 1.0.8b - 2026-09-30
 
 - Fixed random casts. In 1.0.8 the cast code called the target picker through a name that was reused for the cast bar inside that function, so it errored on every cast and let go at the wrong moment instead of aiming. Normal casts now aim for 97-99% again.

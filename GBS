@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.8b";
+G.VERSION = "1.0.9";
 G.UPDATED = "2026-09-30";
-G.NOTE = "Fix random casts, remove Release at slider";
+G.NOTE = "Never clicks game popups, safer cast timing";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -40,7 +40,7 @@ pcall(function()
 end);
 pcall(mouse1release);
 local x = {
-		castPct = 98,
+		castPct = 99.5,
 		castRandom = true,
 		castTimeoutMs = 2500,
 		recastAfterReelMs = 1000,
@@ -258,12 +258,26 @@ local function f()
 	local t, o = pcall(isrbxactive);
 	return (not t) or (o ~= false);
 end;
+local cg = { list = {}, warned = {} };
 local g = { mouseHeld = false, spaceHeld = false, mouse = nil };
-function g.press()
+function g.press(safe)
 	if not g.mouseHeld then
+		local hit = cg.blocker(g.readMouse());
+		if hit then
+			cg.warn(hit);
+			local sx, sy = nil, nil;
+			if safe then
+				sx, sy = cg.safeSpot();
+			end;
+			if sx then
+				g.moveTo(sx, sy);
+			end;
+			return false;
+		end;
 		pcall(mouse1press);
 		g.mouseHeld = true;
 	end;
+	return true;
 end;
 function g.release()
 	if g.mouseHeld then
@@ -311,8 +325,100 @@ function g.readMouse()
 	end;
 	return B, G;
 end;
+function cg.scan(t)
+	if cg.at and t - cg.at < 300 then
+		return cg.list;
+	end;
+	cg.at = t;
+	local list, budget, qteOrder = {}, 2500, nil;
+	local pg = S(r(), "PlayerGui");
+	local okc, guis = pcall(function()
+			return pg:GetChildren();
+		end);
+	for _, gui in ipairs(okc and guis or {}) do
+		local okn, gname = pcall(function()
+				return gui.Name;
+			end);
+		local oke, en = pcall(function()
+				return gui.Enabled;
+			end);
+		local oko, order = pcall(function()
+				return gui.DisplayOrder;
+			end);
+		order = oko and type(order) == "number" and order or nil;
+		if okn and gname == "QuickTimeEvents" then
+			qteOrder = order;
+		elseif okn and not (oke and en == false) then
+			local stack = { { gui, tostring(gname) } };
+			while #stack > 0 and budget > 0 do
+				local node = table.remove(stack);
+				budget = budget - 1;
+				local okk, kids = pcall(function()
+						return node[1]:GetChildren();
+					end);
+				for _, ch in ipairs(okk and kids or {}) do
+					local okv, vis = pcall(function()
+							return ch.Visible;
+						end);
+					if not (okv and vis == false) then
+						local okcl, cls = pcall(function()
+								return ch.ClassName;
+							end);
+						local okn2, nm = pcall(function()
+								return ch.Name;
+							end);
+						local path = node[2] .. "." .. tostring(okn2 and nm or "?");
+						if okcl and (cls == "TextButton" or cls == "ImageButton") then
+							local bx, by, bw, bh = V(ch);
+							if bx and bw > 2 and bh > 2 then
+								list[#list + 1] = { x = bx, y = by, w = bw, h = bh, path = path, order = order };
+							end;
+						end;
+						stack[#stack + 1] = { ch, path };
+					end;
+				end;
+			end;
+		end;
+	end;
+	cg.list, cg.qteOrder = list, qteOrder;
+	return list;
+end;
+function cg.blocker(px, py, forShake)
+	if not (px and py) then
+		return nil;
+	end;
+	for _, b in ipairs(cg.scan(k())) do
+		if px >= b.x and px <= b.x + b.w and py >= b.y and py <= b.y + b.h then
+			if not (forShake and b.order and cg.qteOrder and b.order < cg.qteOrder) then
+				return b.path;
+			end;
+		end;
+	end;
+	return nil;
+end;
+function cg.warn(path)
+	local t = k();
+	if (cg.warned[path] or -1000000000.0) + 30000 < t then
+		cg.warned[path] = t;
+		pcall(notify, "Didn't click, " .. path .. " was under the cursor", 4);
+	end;
+end;
+function cg.safeSpot()
+	local ok, vp = pcall(function()
+			return workspace.CurrentCamera.ViewportSize;
+		end);
+	if not (ok and vp) then
+		return nil;
+	end;
+	for _, f in ipairs({ { .5, .3 }, { .3, .45 }, { .7, .45 }, { .25, .25 }, { .75, .25 }, { .5, .6 }, { .15, .5 }, { .85, .5 } }) do
+		local sx, sy = vp.X * f[1], vp.Y * f[2];
+		if not cg.blocker(sx, sy) then
+			return sx, sy;
+		end;
+	end;
+	return nil;
+end;
 local K = {
-		running = false,
 		phase = "IDLE",
 		phaseAt = 0,
 		lastEvent = "",
@@ -531,7 +637,7 @@ function c.watch(t)
 			end;
 			table.sort(s);
 			local frame = (c.s and c.s.dt) or 16;
-			c.lat = math.max(0, math.min(120, s[math.floor((#s + 1) / 2)] - frame));
+			c.lat = math.max(0, math.min(35, s[math.floor((#s + 1) / 2)] - frame));
 		end;
 		c.sentAt = nil;
 	elseif t - c.sentAt > 400 then
@@ -559,7 +665,7 @@ function c.step(t, o)	if K.phase == "IDLE" then
 			K.status = string.format("recast in %dms", K.recastAt - t);
 			return;
 		end;
-		g.press();
+		g.press(true);
 		K.casts = K.casts + 1;
 		K.castPressAt = t;
 		K.castFill, K.castFillAt, K.castRate = 0, t, 0;
@@ -584,7 +690,7 @@ function c.step(t, o)	if K.phase == "IDLE" then
 				g.release();
 				K.castPressAt = t;
 			elseif not g.mouseHeld and t - K.castPressAt >= 50 then
-				g.press();
+				g.press(true);
 				K.castPressAt = t;
 				K.castRepresses = K.castRepresses + 1;
 			end;
@@ -592,7 +698,7 @@ function c.step(t, o)	if K.phase == "IDLE" then
 		return;
 	end;
 	if not g.mouseHeld then
-		g.press();
+		g.press(true);
 	end;
 	K.status = string.format("charging %d%%", math.floor(B * 100));
 	local s = c.s;
@@ -625,7 +731,7 @@ function c.step(t, o)	if K.phase == "IDLE" then
 	s.f, s.at = B, t;
 	local fire, aim = false, B;
 	if s.n >= 1 and s.spd and s.spd > 0 and s.spd < .01 then
-		local lat = math.min(c.lat or s.dt, 120, .35 / s.spd);
+		local lat = math.min(c.lat or s.dt, 35, .35 / s.spd);
 		local function land(ahead)
 			local p = B + s.dir * s.spd * ahead;
 			for _ = 1, 3 do
@@ -772,6 +878,12 @@ function T.step(t)
 			T.moveTo(o.cx, o.cy);
 		end;
 		K.status = "shake: waiting for cursor";
+		return;
+	end;
+	local cover = cg.blocker(mx or o.cx, my or o.cy, true);
+	if cover then
+		cg.warn(cover);
+		K.status = "shake: something is covering the button";
 		return;
 	end;
 	pcall(mouse1press);
@@ -1151,6 +1263,9 @@ local function L(t)
 		fm.markHome();
 	end;
 	K.recastAt = 0;
+	if t then
+		c.lat, c.lats, c.sentAt = nil, nil, nil;
+	end;
 	K.status = t and "starting" or "idle";
 	if t and G.setMining then
 		G.setMining(false);
