@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.7";
+G.VERSION = "1.0.7b";
 G.UPDATED = "2026-09-30";
-G.NOTE = "Menu now loads from JDUI";
+G.NOTE = "Fix the menu not loading on Matcha";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -2533,7 +2533,11 @@ local Qe;
 do
 	local JDUI_URL = "https://raw.githubusercontent.com/jdev-studio/jdui/refs/heads/main/JDUI";
 	local buildUI = function()
-		return loadstring(game:HttpGet(JDUI_URL))();
+		local ui = loadstring(game:HttpGet(JDUI_URL))();
+		if type(ui) ~= "table" then
+			ui = rawget(_G, "JDUI") or getfenv().JDUI;
+		end;
+		return ui;
 	end;
 	local ok, res = pcall(buildUI);
 	if ok and type(res) == "table" then
