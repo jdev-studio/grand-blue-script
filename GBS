@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.10d";
+G.VERSION = "1.0.10e";
 G.UPDATED = "2026-09-30";
-G.NOTE = "Ore walking finds respawned ores straight away";
+G.NOTE = "Ore walking: stands beside the ore, no extra swings";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -1479,6 +1479,9 @@ function w.step(t)
 			w.status = "waiting for a mining bar";
 			return;
 		end;
+		if w.hold then
+			return;
+		end;
 		g.press();
 		w.swings = w.swings + 1;
 		w.setPhase("SWING", t);
@@ -2697,23 +2700,40 @@ function mt.center(ore)
 			return ore:GetChildren();
 		end);
 	local sx, sy, sz, n = 0, 0, 0, 0;
+	local shapes = {};
 	for _, pc in ipairs(okc and parts or {}) do
 		local okn, nm = pcall(function()
 				return pc.Name;
 			end);
-		if okn and nm == "Ore" then
+		if okn and (nm == "Ore" or nm == "BaseRock") then
 			local okp, pos = pcall(function()
 					return pc.Position;
 				end);
 			if okp and typeof(pos) == "Vector3" then
-				sx, sy, sz, n = sx + pos.X, sy + pos.Y, sz + pos.Z, n + 1;
+				local oks, size = pcall(function()
+						return pc.Size;
+					end);
+				shapes[#shapes + 1] = { pos = pos, size = oks and typeof(size) == "Vector3" and size or nil };
+				if nm == "Ore" then
+					sx, sy, sz, n = sx + pos.X, sy + pos.Y, sz + pos.Z, n + 1;
+				end;
 			end;
 		end;
 	end;
 	if n == 0 then
 		return nil;
 	end;
-	return Vector3.new(sx / n, sy / n, sz / n);
+	local center = Vector3.new(sx / n, sy / n, sz / n);
+	local radius, top, bottom = 0, -math.huge, math.huge;
+	for _, sh in ipairs(shapes) do
+		local half = sh.size and math.max(sh.size.X, sh.size.Z) / 2 or 1.5;
+		local halfY = sh.size and sh.size.Y / 2 or 1.5;
+		local flat = math.sqrt((sh.pos.X - center.X) ^ 2 + (sh.pos.Z - center.Z) ^ 2);
+		radius = math.max(radius, flat + half);
+		top = math.max(top, sh.pos.Y + halfY);
+		bottom = math.min(bottom, sh.pos.Y - halfY);
+	end;
+	return center, math.min(math.max(radius, 2), 12), top, bottom;
 end;
 function mt.folder()
 	return R("mtFolder", function()
@@ -2748,9 +2768,16 @@ function mt.scan()
 							return ch:GetAttribute("ObjectType");
 						end);
 					if okt and kind == "Ore" then
-						local pos = mt.center(ch) or u(ch);
+						local pos, radius, top, bottom = mt.center(ch);
+						pos = pos or u(ch);
 						if pos and mt.inArea(pos) then
-							found[#found + 1] = { name = nm, pos = pos };
+							found[#found + 1] = {
+								name = nm,
+								pos = pos,
+								radius = radius or 4,
+								top = top or (pos.Y + 3),
+								bottom = bottom or (pos.Y - 3),
+							};
 						end;
 					end;
 				end;
@@ -2838,11 +2865,12 @@ end;
 function mt.setTarget(ore, inst, kind, now, char)
 	mt.target, mt.inst, mt.kind, mt.state = ore, inst, kind, "WALK";
 	mt.bestDist, mt.progressAt, mt.checkAt, mt.digs, mt.ups, mt.sawBar, mt.hp, mt.fails = math.huge, now, now, 0, 0, false, nil, 0;
+	mt.stopDist = math.min(math.max(ore.radius + 2.5, 3.5), 14);
 	m.follow, m.navBest, m.lastPos, m.lastMoveAt, m.strafeUntil, m.octant = nil, nil, nil, now, 0, nil;
 	local okp, params = pcall(function()
 			local rp = RaycastParams.new();
 			rp.FilterType = Enum.RaycastFilterType.Exclude;
-			local skip = { char, inst };
+			local skip = { char };
 			local ents = S(workspace, "Entities");
 			if ents then
 				skip[#skip + 1] = ents;
@@ -2855,10 +2883,11 @@ function mt.setTarget(ore, inst, kind, now, char)
 		end);
 	mt.params = okp and params or nil;
 	mt.lastSeen = nil;
-	mt.dbg(string.format("target %s (%s) at %.0f, %.0f, %.0f", tostring(ore.name), tostring(kind), ore.pos.X, ore.pos.Y, ore.pos.Z));
+	mt.dbg(string.format("target %s (%s) at %.0f, %.0f, %.0f, rock %.1f wide, top %.1f, bottom %.1f, stopping %.1f from its middle", tostring(ore.name), tostring(kind), ore.pos.X, ore.pos.Y, ore.pos.Z, ore.radius * 2, ore.top, ore.bottom, mt.stopDist));
 end;
 function mt.step(now)
 	if not x.mineTravel then
+		w.hold = false;
 		return w.step(now);
 	end;
 	local char = r() and (r()).Character;
@@ -2870,8 +2899,10 @@ function mt.step(now)
 		if mt.state ~= "IDLE" then
 			mt.reset();
 		end;
+		w.hold = false;
 		return w.step(now);
 	end;
+	w.hold = true;
 	if not mt.scanning and (now - mt.scanAt > 20000 or (#mt.ores == 0 and now - mt.scanAt > 3000)) then
 		mt.scan();
 	end;
@@ -2933,17 +2964,19 @@ function mt.step(now)
 	local dx, dz = ore.pos.X - me.X, ore.pos.Z - me.Z;
 	local dist = math.sqrt(dx * dx + dz * dz);
 	local ux, uz = dx / math.max(dist, .001), dz / math.max(dist, .001);
-	local dy = me.Y - ore.pos.Y;
-	local levelOk = dy >= -8 and dy <= 5;
+	local onTop = me.Y > ore.top + 1 and dist < ore.radius + 1;
+	local levelOk = me.Y >= ore.bottom - 4 and me.Y <= ore.top + 3.5 and not onTop;
+	local near = math.max(mt.NEAR, mt.stopDist + 5);
 	if mt.state == "MINE" then
 		if w.phase == "QTE" then
 			mt.fails = 0;
 		end;
-		if (dist > mt.NEAR + 2 or not levelOk) and not busy then
-			mt.state = dy > 5 and "UP" or "WALK";
+		if (dist > near + 2 or not levelOk) and not busy then
+			mt.state = onTop and "UP" or "WALK";
 			mt.bestDist, mt.progressAt, mt.upAt = math.huge, now, now;
 		else
-			if w.noBar > mt.noBarStart and w.phase == "IDLE" then
+			if w.noBar > mt.noBarStart then
+				mt.noBarStart = w.noBar;
 				mt.fails = (mt.fails or 0) + 1;
 				if mt.fails >= 4 then
 					mt.blacklist[ore.name] = now + 60000;
@@ -2951,9 +2984,12 @@ function mt.step(now)
 					mt.reset();
 					return;
 				end;
+				mt.stopDist = math.max(ore.radius * .5, mt.stopDist - 1.5);
+				mt.dbg(string.format("swing missed, moving in to %.1f studs", mt.stopDist));
 				mt.state, mt.nearAt, mt.nearBest, mt.nearBlockUntil = "NEAR", now, math.huge, nil;
 				return;
 			end;
+			w.hold = false;
 			w.step(now);
 			if mt.hp then
 				w.status = string.format("mining %s (%s)", tostring(mt.kind), tostring(mt.hp));
@@ -2962,16 +2998,17 @@ function mt.step(now)
 		end;
 	end;
 	if mt.state == "DIG" then
-		if now - mt.digAt < 180 then
+		if now - mt.digAt < 90 then
 			m.steer(ux, uz);
 			return;
 		end;
-		if now - mt.digAt < 4500 and not (mt.digSwung and w.phase == "IDLE") then
+		if now - mt.digAt < 4500 and not (mt.digSwung and (w.phase == "COOLDOWN" or w.phase == "IDLE")) then
 			mt.stopMoving();
-			if w.phase ~= "IDLE" then
+			w.hold = false;
+			w.step(now);
+			if w.phase == "SWING" or w.phase == "QTE" then
 				mt.digSwung = true;
 			end;
-			w.step(now);
 			w.status = string.format("digging towards %s (%d studs)", tostring(mt.kind), math.floor(dist));
 			return;
 		end;
@@ -2982,7 +3019,7 @@ function mt.step(now)
 		return w.step(now);
 	end;
 	if mt.state == "FACE" then
-		if now - mt.faceAt < 180 then
+		if now - mt.faceAt < 90 then
 			m.steer(ux, uz);
 			return;
 		end;
@@ -3009,42 +3046,33 @@ function mt.step(now)
 		mt.state, mt.nearAt, mt.nearBest = "NEAR", now, math.huge;
 		return;
 	end;
+	if onTop then
+		mt.stopMoving();
+		mt.state, mt.upAt = "UP", now;
+		return;
+	end;
 	if dist < mt.bestDist - 1 then
 		mt.bestDist, mt.progressAt, mt.digs = dist, now, 0;
 	end;
-	if dist <= mt.NEAR and dy <= 5 and now >= (mt.nearBlockUntil or 0) then
+	if dist <= near and levelOk and now >= (mt.nearBlockUntil or 0) then
 		if mt.state ~= "NEAR" then
 			mt.state, mt.nearAt, mt.nearBest = "NEAR", now, dist;
 		end;
 		if dist < mt.nearBest - .5 then
 			mt.nearBest, mt.nearAt = dist, now;
 		end;
-		if dist <= 3.5 and levelOk then
+		if dist <= mt.stopDist or now - mt.nearAt > 500 then
 			mt.stopMoving();
 			mt.state, mt.faceAt = "FACE", now;
 			return;
 		end;
-		if now - mt.nearAt > 500 then
-			if levelOk then
-				mt.stopMoving();
-				mt.state, mt.faceAt = "FACE", now;
-				return;
-			end;
-			mt.state, mt.nearBlockUntil = "WALK", now + 3000;
-		else
-			m.key(A.SPACE, false);
-			m.steer(ux, uz);
-			w.status = string.format("walking up to %s (%d studs)", tostring(mt.kind), math.floor(dist));
-			return;
-		end;
-	end;
-	if dist <= mt.NEAR + 4 and dy > 5 then
-		mt.stopMoving();
-		mt.state, mt.upAt = "UP", now;
+		m.key(A.SPACE, false);
+		m.steer(ux, uz);
+		w.status = string.format("walking up to %s (%d studs)", tostring(mt.kind), math.floor(dist));
 		return;
 	end;
 	if mt.state == "NEAR" then
-		mt.state = "WALK";
+		mt.state, mt.nearBlockUntil = "WALK", now + 3000;
 	end;
 	if now - mt.progressAt > 2000 then
 		mt.digs = (mt.digs or 0) + 1;
@@ -3071,6 +3099,7 @@ function G.setMining(t)
 	w.running = t;
 	g.releaseAll();
 	mt.reset();
+	w.hold = false;
 	w.triggerAt = 0;
 	X.reset(w.timer);
 	w.lastEvent = tostring(i("QTEEvent") or "");

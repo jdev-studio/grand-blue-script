@@ -6,6 +6,13 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.0.10e - 2026-09-30
+
+- Stops swinging once the ore is broken. The miner starts its next swing by itself when a cooldown ends, and the walker kept letting it, so after an ore broke it kept hitting it (a broken ore still starts a mining bar). The miner now only swings while the walker is actually mining or digging.
+- Stands beside the ore instead of on it or in the middle of it. It measures each rock (its width and the height of its top and bottom) and stops about a stud outside the edge, or wherever it bumps into the rock first. It counts as on top of the ore when it's above the rock's top inside its footprint (it used to compare against the crystals, which sit on the rock, so standing on the rock looked level) and steps off.
+- Turning to face the ore is a short tap instead of a 0.18 s walk, and the ore is no longer left out of the obstacle checks, so it doesn't walk into or up the rock.
+- A missed swing moves it 1.5 studs closer (never past halfway into the rock); after 4 misses it moves on. This now actually triggers: the check used to wait for the miner to be idle, which never happens because it goes straight into the next swing.
+
 ## 1.0.10d - 2026-09-30
 
 - Moves on to the next ore straight away. A respawned ore comes back as a new object with a new name, so the list of ores went stale and after a break it could sit for 10+ seconds until the next rescan. It now rescans as soon as it has nothing to go to (at most every 3 seconds) and every 20 seconds otherwise.
