@@ -13,7 +13,7 @@ You need an executor that supports the Drawing API (written against Matcha) plus
 ## What's in it
 
 - **Auto fish** – casts, handles the shake and reel minigames, and recasts. Release point is adjustable.
-- **Auto mine** – swings the pickaxe and times the bar.
+- **Auto mine** – swings the pickaxe and times the bar. In the Anchor Town mining area it also walks to the nearest ore and moves on to the next one when it breaks (Walk to ores, on by default).
 - **Autofarm chickens** – walks to the nearest chicken and hits it.
 - **ESP** – fruits, chests and the treasure map dig spot.
 - **Monster fights** – if a Fishfolk shows up while you're fishing, it switches to your weapon, kills it, teleports back to where you started and goes back to fishing.

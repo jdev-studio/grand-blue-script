@@ -6,6 +6,11 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.0.10 - 2026-09-30
+
+- Auto Mine walks between ores in Anchor Town. Inside the mining area (a border around the island's ores) it goes to the nearest ore, mines it with the normal mining code, and when the ore is gone, marked mined, or out of ore pieces it walks to the next one. Ores it can't reach within 8 seconds are skipped for 2 minutes, and an ore that won't start a mining bar after 3 swings is skipped for a minute. Outside Anchor Town, or with Walk to ores switched off on the Mine tab, mining works exactly as before.
+- Only the Anchor Town island folder is scanned, spread over several frames, once a minute; in between it only re-checks the ores it already knows about.
+
 ## 1.0.9 - 2026-09-30
 
 - The script no longer clicks game popups. Before every click it checks whether a visible button from another game screen (like the world boss "join?" prompt) is under the cursor. Shake clicks wait until the shake button is clear, casts move the cursor to a clear spot first, and mining and fight clicks are skipped while something is in the way. A notification says what it avoided (at most once every 30 seconds per button).

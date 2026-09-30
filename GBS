@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.9";
+G.VERSION = "1.0.10";
 G.UPDATED = "2026-09-30";
-G.NOTE = "Never clicks game popups, safer cast timing";
+G.NOTE = "Auto Mine walks between ores in Anchor Town";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -42,6 +42,7 @@ pcall(mouse1release);
 local x = {
 		castPct = 99.5,
 		castRandom = true,
+		mineTravel = true,
 		castTimeoutMs = 2500,
 		recastAfterReelMs = 1000,
 		castRepressMs = 250,
@@ -1209,7 +1210,7 @@ function eq.load()
 					x[key] = d[key];
 				end;
 			end;
-			for _, key in ipairs({ "autoEquipPick", "castRandom" }) do
+			for _, key in ipairs({ "autoEquipPick", "castRandom", "mineTravel" }) do
 				if type(d[key]) == "boolean" then
 					x[key] = d[key];
 				end;
@@ -2672,14 +2673,251 @@ do
 		warn("GBS UI failed to load: " .. tostring(res or "JDUI returned nothing"));
 	end;
 end;
-local ee = { win = nil };
-function G.setMining(t)
+local mt = {
+		area = { minX = -508, maxX = -305, minZ = 382, maxZ = 656 },
+		ores = {},
+		scanAt = -1000000000.0,
+		scanning = false,
+		target = nil,
+		state = "IDLE",
+		blacklist = {},
+		mined = 0,
+		ARRIVE = 10,
+	};
+function mt.inArea(p)
+	local b = mt.area;
+	return p.X >= b.minX and p.X <= b.maxX and p.Z >= b.minZ and p.Z <= b.maxZ;
+end;
+function mt.folder()
+	return R("mtFolder", function()
+		return S(S(S(workspace, "Islands"), "Anchor Town"), "Island");
+	end, 5);
+end;
+function mt.scan()
+	if mt.scanning then
+		return;
+	end;
+	mt.scanning = true;
+	task.spawn(function()
+		pcall(function()
+			local folder = mt.folder();
+			local okl, list = pcall(function()
+					return folder:GetChildren();
+				end);
+			if not okl then
+				return;
+			end;
+			local found = {};
+			for n, ch in ipairs(list) do
+				if n % 250 == 0 then
+					task.wait();
+				end;
+				local okn, nm = pcall(function()
+						return ch.Name;
+					end);
+				nm = okn and tostring(nm) or "";
+				if nm:sub(1, 8) == "OreBlock" or nm:sub(1, 13) == "ModelObjectId" then
+					local okt, kind = pcall(function()
+							return ch:GetAttribute("ObjectType");
+						end);
+					if okt and kind == "Ore" then
+						local pos = u(ch);
+						if pos and mt.inArea(pos) then
+							found[#found + 1] = { name = nm, pos = pos };
+						end;
+					end;
+				end;
+			end;
+			mt.ores = found;
+		end);
+		mt.scanAt = k();
+		mt.scanning = false;
+	end);
+end;
+function mt.check(ore, now)
+	if (mt.blacklist[ore.name] or 0) > now then
+		return nil;
+	end;
+	local folder = mt.folder();
+	local inst = folder and S(folder, ore.name);
+	if not inst then
+		return nil;
+	end;
+	local okm, mined = pcall(function()
+			return inst:GetAttribute("Mined");
+		end);
+	if okm and mined == true then
+		return nil;
+	end;
+	local okc, parts = pcall(function()
+			return inst:GetChildren();
+		end);
+	local pieces = 0;
+	for _, pc in ipairs(okc and parts or {}) do
+		local okn, nm = pcall(function()
+				return pc.Name;
+			end);
+		if okn and nm == "Ore" then
+			pieces = pieces + 1;
+		end;
+	end;
+	if okc and pieces == 0 then
+		return nil;
+	end;
+	local okk, kind = pcall(function()
+			return inst:GetAttribute("Ore");
+		end);
+	return inst, okk and tostring(kind or "ore") or "ore";
+end;
+function mt.pick(me, now)
+	local best, bestD, bestInst, bestKind = nil, math.huge, nil, nil;
+	for _, ore in ipairs(mt.ores) do
+		local dist = d(ore.pos, me);
+		if dist < bestD then
+			local inst, kind = mt.check(ore, now);
+			if inst then
+				best, bestD, bestInst, bestKind = ore, dist, inst, kind;
+			end;
+		end;
+	end;
+	return best, bestInst, bestKind, bestD;
+end;
+function mt.stopMoving()
+	m.releaseMove();
+	m.key(A.SPACE, false);
+end;
+function mt.reset()
+	mt.stopMoving();
+	mt.target, mt.inst, mt.state = nil, nil, "IDLE";
+end;
+function mt.setTarget(ore, inst, kind, now, char)
+	mt.target, mt.inst, mt.kind, mt.state = ore, inst, kind, "WALK";
+	mt.bestDist, mt.progressAt, mt.checkAt = math.huge, now, now;
+	m.follow, m.navBest, m.lastPos, m.lastMoveAt, m.strafeUntil, m.octant = nil, nil, nil, now, 0, nil;
+	local okp, params = pcall(function()
+			local rp = RaycastParams.new();
+			rp.FilterType = Enum.RaycastFilterType.Exclude;
+			local skip = { char, inst };
+			local ents = S(workspace, "Entities");
+			if ents then
+				skip[#skip + 1] = ents;
+			end;
+			rp.FilterDescendantsInstances = skip;
+			pcall(function()
+				rp.RespectCanCollide = true;
+			end);
+			return rp;
+		end);
+	mt.params = okp and params or nil;
+end;
+function mt.step(now)
+	if not x.mineTravel then
+		return w.step(now);
+	end;
+	local char = r() and (r()).Character;
+	local root = l();
+	local okp, me = pcall(function()
+			return root.Position;
+		end);
+	if not (okp and typeof(me) == "Vector3") or not mt.inArea(me) then
+		if mt.state ~= "IDLE" then
+			mt.reset();
+		end;
+		return w.step(now);
+	end;
+	if not mt.scanning and (now - mt.scanAt > 60000 or (#mt.ores == 0 and now - mt.scanAt > 5000)) then
+		mt.scan();
+	end;
+	if m.keys[A.SPACE] and now >= m.jumpUntil then
+		m.key(A.SPACE, false);
+	end;
+	local busy = w.phase == "QTE" or w.phase == "SWING" or w.phase == "COOLDOWN";
+	if mt.target and now - mt.checkAt >= 400 then
+		mt.checkAt = now;
+		local inst = mt.check(mt.target, now);
+		if not inst then
+			if mt.state == "MINE" then
+				mt.mined = mt.mined + 1;
+				pcall(notify, "Finished that " .. tostring(mt.kind) .. ", looking for the next ore", 3);
+			end;
+			mt.reset();
+		else
+			mt.inst = inst;
+		end;
+	end;
+	if not mt.target then
+		if busy then
+			return w.step(now);
+		end;
+		local ore, inst, kind, dist = mt.pick(me, now);
+		if not ore then
+			mt.stopMoving();
+			w.status = mt.scanning and "looking for ores" or "no ores left in the area, waiting for them to respawn";
+			return;
+		end;
+		mt.setTarget(ore, inst, kind, now, char);
+		if mt.mined > 0 then
+			pcall(notify, string.format("Walking to %s (%d studs)", tostring(kind), math.floor(dist)), 3);
+		end;
+	end;
+	local ore = mt.target;
+	local dx, dz = ore.pos.X - me.X, ore.pos.Z - me.Z;
+	local dist = math.sqrt(dx * dx + dz * dz);
+	if mt.state == "MINE" then
+		if dist > mt.ARRIVE + 6 and not busy then
+			mt.state = "WALK";
+			mt.bestDist, mt.progressAt = math.huge, now;
+		else
+			if w.noBar - mt.noBarStart >= 3 then
+				mt.blacklist[ore.name] = now + 60000;
+				pcall(notify, "Couldn't mine that " .. tostring(mt.kind) .. " from here, trying another ore", 3);
+				mt.reset();
+				return;
+			end;
+			return w.step(now);
+		end;
+	end;
+	if busy then
+		mt.stopMoving();
+		return w.step(now);
+	end;
+	if mt.state == "FACE" then
+		if now - mt.faceAt < 180 then
+			m.steer(dx / math.max(dist, .001), dz / math.max(dist, .001));
+			return;
+		end;
+		mt.stopMoving();
+		mt.state, mt.noBarStart = "MINE", w.noBar;
+		w.status = "mining " .. tostring(mt.kind);
+		return;
+	end;
+	if dist < mt.bestDist - 1 then
+		mt.bestDist, mt.progressAt = dist, now;
+	end;
+	local stuckClose = dist <= mt.ARRIVE + 4 and now - mt.progressAt > 1500;
+	if dist <= mt.ARRIVE or stuckClose then
+		mt.stopMoving();
+		mt.state, mt.faceAt = "FACE", now;
+		return;
+	end;
+	if now - mt.progressAt > 8000 then
+		mt.blacklist[ore.name] = now + 120000;
+		pcall(notify, "Can't reach that " .. tostring(mt.kind) .. ", skipping it for 2 minutes", 3);
+		mt.reset();
+		return;
+	end;
+	m.params, m.paramsFor = mt.params, char;
+	m.walkTo(me, ore.pos.X, ore.pos.Z, char, mt.inst, now);
+	w.status = string.format("walking to %s (%d studs)", tostring(mt.kind), math.floor(dist));
+end;
+local ee = { win = nil };function G.setMining(t)
 	t = t and true or false;
 	if w.running == t then
 		return;
 	end;
 	w.running = t;
 	g.releaseAll();
+	mt.reset();
 	w.triggerAt = 0;
 	X.reset(w.timer);
 	w.lastEvent = tostring(i("QTEEvent") or "");
@@ -2742,6 +2980,7 @@ end;
 					menuKey = ui.Keybind,
 					theme = ui.Theme,
 					castRandom = x.castRandom and true or false,
+					mineTravel = x.mineTravel and true or false,
 					autoEquipPick = x.autoEquipPick and true or false,
 					pickKey = x.pickKey,
 					weaponKey = x.weaponKey,
@@ -2830,6 +3069,18 @@ end;
 					x.pickKey = k;
 					G.saveSettings();
 				end });
+		mine:AddToggle({
+			Title = "Walk to ores",
+			Description = "Anchor Town: goes to the next ore when one breaks",
+			Default = x.mineTravel and true or false,
+			Callback = function(t)
+				x.mineTravel = t;
+				if not t then
+					mt.reset();
+				end;
+				G.saveSettings();
+			end,
+		});
 		ee.chickenToggle = farm:AddToggle({ Title = "Autofarm Chickens", Description = "Hotkey: F4", Default = false, Callback = function(t)
 					G.setFarm(t);
 				end });
@@ -2939,7 +3190,7 @@ do
 			end;
 		end;
 		if w.running then
-			local t, o = pcall(w.step, k());
+			local t, o = pcall(mt.step, k());
 			if not t then
 				g.releaseAll();
 				w.status = "error: " .. tostring(o);
