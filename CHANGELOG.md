@@ -6,6 +6,14 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.0.10h - 2026-10-01
+
+- Stops climbing on the ore. 1.0.10g relied on raycasts to see what's in front, but in Matcha a raycast never hits anything (not even the ground), so it always thought the way was clear, walked into the rock, jumped when it got stuck and ended up on top, spinning between getting on and off. Raycasts are no longer used at all.
+- Goes for the ore crystals instead of the middle of the rock. The rock's size came from its mesh boxes, which are far bigger than the rock (it measured one at 23.5 studs wide), so every distance was off. Now it walks to the nearest crystal at a height it can reach and counts as touching when it's within about 3 studs of it, or pressed against the rock within 6 studs of it. A missed swing marks that crystal and it tries the next one.
+- Never jumps near the ore. Pressed against the rock but not at a crystal, it walks round the rock towards one. Jumping is only for being stuck away from the ore (an edge), and if two jumps don't get it past, it digs. If it still hasn't reached a crystal 6 seconds after getting to the ore, it digs straight towards one.
+- On the way to an ore it now jumps twice before it starts digging, so it hops over edges instead of mining them.
+- The camera in Grand Blue doesn't turn with the arrow keys, so it faces the ore by walking at the crystal.
+
 ## 1.0.10g - 2026-09-30
 
 - Checks what's in front before every swing. Near the ore it casts short rays straight at it and only swings when the ore's rock is right in front of it (within about 1.8 studs); otherwise it keeps walking forward. It used to decide it was close from distance maths and swing at the air.
