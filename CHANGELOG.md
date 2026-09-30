@@ -6,6 +6,14 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.0.11 - 2026-10-01
+
+- Replaced the free-roaming ore walker with a fixed route of 5 Anchor Town ores, recorded standing next to each one. It stands where the route was recorded and faces the same way, so it no longer has to work out where the ore is or how to get next to it.
+- New Mine tab toggles, only one on at a time: **Walk route** walks the route in a loop, and **Teleport to ores** teleports to each ore instead. If the game refuses the teleport or moves you back, it switches to Walk route and says so. With both off, Auto Mine mines where you stand.
+- New **Swings per ore** slider (1 to 10, default 2). It moves on early if the ore breaks, skips ores that are already broken, and waits if the whole route is broken until one comes back.
+- If the character can't be turned directly, it stops just short of each spot and steps onto it facing the ore.
+- Mining errors now go in the log.
+
 ## 1.0.10i - 2026-10-01
 
 - Walks round obstacles instead of digging through them. With no raycasts it feels its way: when it's blocked it follows the edge of whatever is in the way (keeping it on one side) and turns back towards the ore as soon as the way opens. If it can't get round on either side it gives up on that ore instead of jumping or digging. It only tries a single jump, for a small step, when it's away from every ore rock.

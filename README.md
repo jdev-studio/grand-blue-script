@@ -13,7 +13,7 @@ You need an executor that supports the Drawing API (written against Matcha) plus
 ## What's in it
 
 - **Auto fish** – casts, handles the shake and reel minigames, and recasts. Release point is adjustable.
-- **Auto mine** – swings the pickaxe and times the bar. In the Anchor Town mining area it also walks to the nearest ore and moves on to the next one when it breaks (Walk to ores, on by default).
+- **Auto mine** – swings the pickaxe and times the bar. In the Anchor Town mining area it can also go round a fixed route of ores (see Mining below).
 - **Autofarm chickens** – walks to the nearest chicken and hits it.
 - **ESP** – fruits, chests and the treasure map dig spot.
 - **Monster fights** – if a Fishfolk shows up while you're fishing, it switches to your weapon, kills it, teleports back to where you started and goes back to fishing.
@@ -29,6 +29,17 @@ You need an executor that supports the Drawing API (written against Matcha) plus
 | End | Show / hide menu |
 
 The menu key can be changed in Settings.
+
+## Mining
+
+The Mine tab has two ways of getting round the Anchor Town ores. Only one can be on at a time:
+
+- **Walk route** walks to each ore on the route in turn, swings, then walks to the next one, and loops.
+- **Teleport to ores** does the same, but teleports to each ore instead of walking. If the game won't let you teleport, or keeps moving you back, it switches to Walk route and tells you.
+
+**Swings per ore** sets how many swings it takes at each ore before moving on (2 by default). It moves on sooner if the ore breaks. Ores that are already broken are skipped, and if every ore on the route is broken it waits until one comes back.
+
+With both off, or outside Anchor Town, Auto Mine just mines wherever you're standing.
 
 ## Settings
 
