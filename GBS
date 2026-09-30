@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.10f";
+G.VERSION = "1.0.10g";
 G.UPDATED = "2026-09-30";
-G.NOTE = "Ore walking: skips high ores, tunnels, hugs the ore";
+G.NOTE = "Ore walking: checks what is in front before every swing, faces the ore";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -2863,16 +2863,28 @@ function mt.stopMoving()
 	m.releaseMove();
 	m.key(A.SPACE, false);
 end;
+function mt.turn(dir)
+	if dir == mt.turning then
+		return;
+	end;
+	if mt.turning == 1 then
+		pcall(keyrelease, 39);
+	elseif mt.turning == -1 then
+		pcall(keyrelease, 37);
+	end;
+	if dir == 1 then
+		pcall(keypress, 39);
+	elseif dir == -1 then
+		pcall(keypress, 37);
+	end;
+	mt.turning = dir;
+end;
 function mt.reset()
 	mt.stopMoving();
+	mt.turn(0);
 	mt.target, mt.inst, mt.state, mt.nearBlockUntil = nil, nil, "IDLE", nil;
 end;
-function mt.setTarget(ore, inst, kind, now, char)
-	mt.target, mt.inst, mt.kind, mt.state = ore, inst, kind, "WALK";
-	mt.bestDist, mt.progressAt, mt.checkAt, mt.digs, mt.ups, mt.sawBar, mt.hp, mt.fails = math.huge, now, now, 0, 0, false, nil, 0;
-	mt.stopDist = math.min(math.max(ore.radius + .8, 3), 13);
-	mt.targetAt, mt.reachedAt, mt.digMode, mt.hpHoldAt = now, nil, false, nil;
-	m.follow, m.navBest, m.lastPos, m.lastMoveAt, m.strafeUntil, m.octant = nil, nil, nil, now, 0, nil;
+function mt.makeParams(char, respect)
 	local okp, params = pcall(function()
 			local rp = RaycastParams.new();
 			rp.FilterType = Enum.RaycastFilterType.Exclude;
@@ -2883,13 +2895,209 @@ function mt.setTarget(ore, inst, kind, now, char)
 			end;
 			rp.FilterDescendantsInstances = skip;
 			pcall(function()
-				rp.RespectCanCollide = true;
+				rp.RespectCanCollide = respect;
 			end);
 			return rp;
 		end);
-	mt.params = okp and params or nil;
+	return okp and params or nil;
+end;
+function mt.setTarget(ore, inst, kind, now, char)
+	mt.target, mt.inst, mt.kind, mt.state = ore, inst, kind, "WALK";
+	mt.bestDist, mt.progressAt, mt.checkAt, mt.digs, mt.ups, mt.sawBar, mt.hp, mt.fails = math.huge, now, now, 0, 0, false, nil, 0;
+	mt.stopDist = math.min(math.max(ore.radius + .8, 3), 13);
+	mt.targetAt, mt.reachedAt, mt.digMode, mt.hpHoldAt = now, nil, false, nil;
+	mt.closeDigs, mt.lastProbe, mt.nudgeUntil, mt.closeBest, mt.closeAt = 0, nil, 0, math.huge, now;
+	m.follow, m.navBest, m.lastPos, m.lastMoveAt, m.strafeUntil, m.octant = nil, nil, nil, now, 0, nil;
+	mt.params = mt.makeParams(char, true);
+	mt.probeAll = mt.makeParams(char, false);
 	mt.lastSeen = nil;
-	mt.dbg(string.format("target %s (%s) at %.0f, %.0f, %.0f, rock %.1f wide, top %.1f, bottom %.1f, stopping %.1f from its middle", tostring(ore.name), tostring(kind), ore.pos.X, ore.pos.Y, ore.pos.Z, ore.radius * 2, ore.top, ore.bottom, mt.stopDist));
+	mt.dbg(string.format("target %s (%s) at %.0f, %.0f, %.0f, rock %.1f wide, top %.1f, bottom %.1f", tostring(ore.name), tostring(kind), ore.pos.X, ore.pos.Y, ore.pos.Z, ore.radius * 2, ore.top, ore.bottom));
+end;
+function mt.aim(ux, uz, now)
+	if mt.camBroken then
+		return true, 0;
+	end;
+	local ok, lv = pcall(function()
+			return workspace.CurrentCamera.CFrame.LookVector;
+		end);
+	if not (ok and lv) then
+		return true, 0;
+	end;
+	local fx, fz = lv.X, lv.Z;
+	local len = math.sqrt(fx * fx + fz * fz);
+	if len < .001 then
+		return true, 0;
+	end;
+	fx, fz = fx / len, fz / len;
+	local err = math.deg(math.atan2(ux * -fz + uz * fx, fx * ux + fz * uz));
+	local limit = mt.turning ~= 0 and mt.turning ~= nil and 4 or 8;
+	if math.abs(err) <= limit then
+		mt.turn(0);
+		mt.turnFrom = nil;
+		return true, err;
+	end;
+	local dir = err > 0 and 1 or -1;
+	if dir ~= mt.turning then
+		mt.turnFrom, mt.turnErr = now, math.abs(err);
+	elseif mt.turnFrom and now - mt.turnFrom > 1500 then
+		if math.abs(err) > mt.turnErr - 5 then
+			mt.camBroken = true;
+			mt.turn(0);
+			mt.dbg("the camera doesn't turn with the arrow keys here, facing the ore by walking only");
+			return true, err;
+		end;
+		mt.turnFrom, mt.turnErr = now, math.abs(err);
+	end;
+	mt.turn(dir);
+	return false, err;
+end;
+function mt.probe(me, ux, uz)
+	local ore = mt.target;
+	local function cast(h, params, len)
+		if not params then
+			return nil, false;
+		end;
+		local ok, hit = pcall(function()
+				return workspace:Raycast(Vector3.new(me.X, me.Y + h, me.Z), Vector3.new(ux * len, 0, uz * len), params);
+			end);
+		return ok and hit or nil, ok;
+	end;
+	local function isOre(hit)
+		local cur = hit and hit.Instance;
+		for _ = 1, 5 do
+			if not cur then
+				break;
+			end;
+			local okn, nm = pcall(function()
+					return cur.Name;
+				end);
+			if okn and nm == ore.name then
+				return true;
+			end;
+			local okp, par = pcall(function()
+					return cur.Parent;
+				end);
+			cur = okp and par or nil;
+		end;
+		return false;
+	end;
+	local worked = false;
+	for _, h in ipairs({ 0, -1.4, 1.2 }) do
+		local hit, ok = cast(h, mt.probeAll, 1.8);
+		worked = worked or ok;
+		if hit and isOre(hit) then
+			return "ore";
+		end;
+	end;
+	if not worked then
+		return nil;
+	end;
+	local low = cast(-2.2, mt.params, 2.4);
+	local mid = cast(0, mt.params, 2.4);
+	local high = cast(2.6, mt.params, 2.4);
+	if (low and isOre(low)) or (mid and isOre(mid)) then
+		return "ore";
+	end;
+	if high then
+		return "wall";
+	end;
+	if low or mid then
+		return "step";
+	end;
+	return "clear";
+end;
+function mt.close(now, me, ore, dist, ux, uz)
+	local aimed, err = mt.aim(ux, uz, now);
+	local probe = mt.probe(me, ux, uz);
+	if probe == nil then
+		probe = (dist <= mt.stopDist or now - mt.closeAt > 600) and "ore" or "clear";
+	end;
+	if probe ~= mt.lastProbe then
+		mt.lastProbe = probe;
+		mt.dbg(string.format("in front: %s (%.1f studs from the middle, camera %d degrees off)", probe, dist, math.floor(math.abs(err or 0) + .5)));
+	end;
+	if dist < mt.closeBest - .5 then
+		mt.closeBest, mt.closeAt = dist, now;
+	end;
+	if probe == "ore" then
+		mt.reachedAt = mt.reachedAt or now;
+		mt.closeAt = now;
+		if w.phase == "QTE" then
+			mt.fails = 0;
+		end;
+		if w.noBar > (mt.noBarStart or w.noBar) then
+			mt.fails = (mt.fails or 0) + 1;
+			mt.dbg(string.format("swing missed while touching the ore (%d)", mt.fails));
+			if mt.fails >= 5 then
+				mt.blacklist[ore.name] = now + 60000;
+				pcall(notify, "Couldn't mine that " .. tostring(mt.kind) .. " from here, trying another ore", 3);
+				mt.reset();
+				return;
+			end;
+			mt.nudgeUntil = now + 200;
+		end;
+		mt.noBarStart = w.noBar;
+		if now < mt.nudgeUntil then
+			m.steer(ux, uz);
+		else
+			mt.stopMoving();
+		end;
+		local hpLeft = mt.hp and tonumber(tostring(mt.hp):match("^%s*(%d+)"));
+		if w.phase == "COOLDOWN" then
+			mt.checkAt = -1000000000.0;
+			if hpLeft and hpLeft <= 1 then
+				mt.hpHoldAt = mt.hpHoldAt or now;
+				if now - mt.hpHoldAt < 1200 then
+					w.hold = true;
+					w.step(now);
+					w.status = "waiting for the ore to break";
+					return;
+				end;
+			end;
+		else
+			mt.hpHoldAt = nil;
+		end;
+		w.hold = not aimed;
+		w.step(now);
+		w.status = aimed and string.format("mining %s%s", tostring(mt.kind), mt.hp and (" (" .. tostring(mt.hp) .. ")") or "") or "turning to face the ore";
+		return;
+	end;
+	mt.noBarStart = w.noBar;
+	if probe == "wall" then
+		mt.stopMoving();
+		w.hold = not aimed;
+		local before = w.phase;
+		w.step(now);
+		if before ~= "SWING" and w.phase == "SWING" then
+			mt.closeDigs = (mt.closeDigs or 0) + 1;
+			if mt.closeDigs > 12 then
+				mt.blacklist[ore.name] = now + 120000;
+				pcall(notify, "Couldn't dig through to that " .. tostring(mt.kind) .. ", skipping it for 2 minutes", 3);
+				mt.reset();
+				return;
+			end;
+		end;
+		w.status = "digging through to " .. tostring(mt.kind);
+		return;
+	end;
+	w.hold = true;
+	if probe == "step" then
+		m.steer(ux, uz);
+		m.jump(now);
+		w.step(now);
+		w.status = "jumping up the edge";
+		return;
+	end;
+	if math.abs(err or 0) > 30 then
+		m.releaseMove();
+	else
+		m.steer(ux, uz);
+		if now - mt.closeAt > 1000 then
+			m.jump(now);
+		end;
+	end;
+	w.step(now);
+	w.status = string.format("moving in to %s (%d studs)", tostring(mt.kind), math.floor(dist));
 end;
 function mt.step(now)
 	if not x.mineTravel then
@@ -2938,7 +3146,7 @@ function mt.step(now)
 			end;
 		end;
 		if not inst then
-			if mt.state == "MINE" or mt.state == "DIG" or mt.sawBar then
+			if mt.state == "CLOSE" or mt.state == "DIG" or mt.sawBar then
 				mt.mined = mt.mined + 1;
 				mt.blacklist[mt.target.name] = now + 20000;
 				pcall(notify, "Finished that " .. tostring(mt.kind) .. ", looking for the next ore", 3);
@@ -2958,6 +3166,7 @@ function mt.step(now)
 				mt.scan();
 			end;
 			mt.stopMoving();
+			mt.turn(0);
 			w.status = mt.scanning and "looking for ores" or "no ores left in the area, waiting for them to respawn";
 			return;
 		end;
@@ -2972,57 +3181,18 @@ function mt.step(now)
 	local ux, uz = dx / math.max(dist, .001), dz / math.max(dist, .001);
 	local onTop = me.Y > ore.top + 1 and dist < ore.radius + 1;
 	local levelOk = me.Y >= ore.bottom - 4 and me.Y <= ore.top + 3.5 and not onTop;
-	local near = math.max(mt.NEAR, mt.stopDist + 5);
+	local near = math.max(mt.NEAR, ore.radius + 6);
 	if not mt.reachedAt and now - mt.targetAt > 30000 then
 		mt.blacklist[ore.name] = now + 180000;
 		pcall(notify, "Couldn't get to that " .. tostring(mt.kind) .. " in 30 seconds, skipping it for 3 minutes", 3);
 		mt.reset();
 		return;
 	end;
-	if mt.state == "MINE" then
-		if w.phase == "QTE" then
-			mt.fails = 0;
-		end;
-		local hpLeft = mt.hp and tonumber(tostring(mt.hp):match("^%s*(%d+)"));
-		if w.phase == "COOLDOWN" then
-			mt.checkAt = -1000000000.0;
-			if hpLeft and hpLeft <= 1 then
-				mt.hpHoldAt = mt.hpHoldAt or now;
-				if now - mt.hpHoldAt < 1200 then
-					w.hold = true;
-					w.step(now);
-					w.status = "waiting for the ore to break";
-					return;
-				end;
-			end;
-		elseif w.phase ~= "IDLE" then
-			mt.hpHoldAt = nil;
-		end;
-		if (dist > near + 2 or not levelOk) and not busy then
-			mt.state = onTop and "UP" or "WALK";
-			mt.bestDist, mt.progressAt, mt.upAt = math.huge, now, now;
-		else
-			if w.noBar > mt.noBarStart then
-				mt.noBarStart = w.noBar;
-				mt.fails = (mt.fails or 0) + 1;
-				if mt.fails >= 4 then
-					mt.blacklist[ore.name] = now + 60000;
-					pcall(notify, "Couldn't mine that " .. tostring(mt.kind) .. " from here, trying another ore", 3);
-					mt.reset();
-					return;
-				end;
-				mt.stopDist = math.max(ore.radius * .5, mt.stopDist - 1.5);
-				mt.dbg(string.format("swing missed, moving in to %.1f studs", mt.stopDist));
-				mt.state, mt.nearAt, mt.nearBest, mt.nearBlockUntil = "NEAR", now, math.huge, nil;
-				return;
-			end;
-			w.hold = false;
-			w.step(now);
-			if mt.hp then
-				w.status = string.format("mining %s (%s)", tostring(mt.kind), tostring(mt.hp));
-			end;
-			return;
-		end;
+	if (w.phase == "SWING" or w.phase == "QTE") and mt.state ~= "DIG" then
+		mt.stopMoving();
+		mt.turn(0);
+		w.step(now);
+		return;
 	end;
 	if mt.state == "DIG" then
 		if now - mt.digAt < 90 then
@@ -3041,25 +3211,12 @@ function mt.step(now)
 		end;
 		mt.state, mt.progressAt = "WALK", now;
 	end;
-	if busy then
-		mt.stopMoving();
-		return w.step(now);
-	end;
-	if mt.state == "FACE" then
-		if now - mt.faceAt < 90 then
-			m.steer(ux, uz);
-			return;
-		end;
-		mt.stopMoving();
-		mt.state, mt.noBarStart, mt.mineAt = "MINE", w.noBar, now;
-		mt.reachedAt = mt.reachedAt or now;
-		w.status = "mining " .. tostring(mt.kind);
-		return;
-	end;
 	if mt.state == "UP" then
+		mt.turn(0);
 		if now - mt.upAt < 700 then
 			m.key(A.SPACE, false);
 			m.steer(-ux, -uz);
+			w.step(now);
 			w.status = "stepping down off the ore";
 			return;
 		end;
@@ -3071,36 +3228,29 @@ function mt.step(now)
 			mt.reset();
 			return;
 		end;
-		mt.state, mt.nearAt, mt.nearBest = "NEAR", now, math.huge;
-		return;
+		mt.state = "WALK";
 	end;
 	if onTop then
 		mt.stopMoving();
 		mt.state, mt.upAt = "UP", now;
 		return;
 	end;
+	if dist <= near and levelOk then
+		if mt.state ~= "CLOSE" then
+			mt.state, mt.closeBest, mt.closeAt, mt.noBarStart = "CLOSE", dist, now, w.noBar;
+		end;
+		return mt.close(now, me, ore, dist, ux, uz);
+	end;
+	if mt.state == "CLOSE" then
+		mt.state, mt.progressAt = "WALK", now;
+		mt.turn(0);
+	end;
+	if busy then
+		mt.stopMoving();
+		return w.step(now);
+	end;
 	if dist < mt.bestDist - 1 then
 		mt.bestDist, mt.progressAt, mt.digs = dist, now, 0;
-	end;
-	if dist <= near and levelOk and now >= (mt.nearBlockUntil or 0) then
-		if mt.state ~= "NEAR" then
-			mt.state, mt.nearAt, mt.nearBest = "NEAR", now, dist;
-		end;
-		if dist < mt.nearBest - .5 then
-			mt.nearBest, mt.nearAt = dist, now;
-		end;
-		if dist <= mt.stopDist or now - mt.nearAt > 500 then
-			mt.stopMoving();
-			mt.state, mt.faceAt = "FACE", now;
-			return;
-		end;
-		m.key(A.SPACE, false);
-		m.steer(ux, uz);
-		w.status = string.format("walking up to %s (%d studs)", tostring(mt.kind), math.floor(dist));
-		return;
-	end;
-	if mt.state == "NEAR" then
-		mt.state, mt.nearBlockUntil = "WALK", now + 3000;
 	end;
 	if now - mt.progressAt > (mt.digMode and 700 or 2000) then
 		mt.digs = (mt.digs or 0) + 1;

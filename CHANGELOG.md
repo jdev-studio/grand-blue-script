@@ -6,6 +6,14 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.0.10g - 2026-09-30
+
+- Checks what's in front before every swing. Near the ore it casts short rays straight at it and only swings when the ore's rock is right in front of it (within about 1.8 studs); otherwise it keeps walking forward. It used to decide it was close from distance maths and swing at the air.
+- Jumps small edges instead of mining them: if something low is in front and the way is clear at chest height, it jumps and carries on. A wall too tall to jump gets dug through, and it keeps digging and walking until it reaches the ore.
+- Faces the ore properly: it turns the camera with the arrow keys until the ore is straight ahead, then walks at it, so the character faces it exactly. Walking with WASD alone can only face 8 directions, up to 22 degrees off, which made swings miss. If the camera doesn't respond to the arrow keys it notices and falls back to walking only.
+- A swing that misses while touching the ore pushes it a little further in before the next one; after 5 misses it moves on.
+- If raycasts ever stop working, it falls back to treating "pushing and not getting closer" as touching the ore.
+
 ## 1.0.10f - 2026-09-30
 
 - Leaves out ores it can't reach: any ore whose rock sits more than 8 studs above you (like the Iron Ore up on the cliff) is never picked. As a backstop, an ore it hasn't reached within 30 seconds is skipped for 3 minutes, so it can't run in circles.
