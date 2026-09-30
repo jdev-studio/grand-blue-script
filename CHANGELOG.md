@@ -6,6 +6,12 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.0.8b - 2026-09-30
+
+- Fixed random casts. In 1.0.8 the cast code called the target picker through a name that was reused for the cast bar inside that function, so it errored on every cast and let go at the wrong moment instead of aiming. Normal casts now aim for 97-99% again.
+- Misses are properly random now: each cast has about a 1 in 4 chance of landing between 80% and 92% (1 in 10 straight after a miss), and there are never more than 6 perfects in a row.
+- Removed the Release at slider. Casts always aim for the perfect zone, with the random misses mixed in.
+
 ## 1.0.8 - 2026-09-30
 
 - Random casts (Fish tab, on by default): every 3 to 6 casts one is released somewhere between 80% and 92% instead of the perfect zone, and the rest aim within 1% either side of Release at. Lots of perfect casts in a row can get you banned. The log marks the deliberate ones with "off target on purpose".

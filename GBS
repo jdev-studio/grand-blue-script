@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.8";
+G.VERSION = "1.0.8b";
 G.UPDATED = "2026-09-30";
-G.NOTE = "Random casts so perfects aren't every time";
+G.NOTE = "Fix random casts, remove Release at slider";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -538,8 +538,20 @@ function c.watch(t)
 		c.sentAt = nil;
 	end;
 end;
-function c.step(t, o)
-	if K.phase == "IDLE" then
+function c.pickTarget()
+	local base = math.max(.01, math.min(1, x.castPct / 100));
+	if not x.castRandom then
+		return base, false;
+	end;
+	local chance = c.lastOff and .1 or .25;
+	if (c.streak or 0) >= 6 or math.random() < chance then
+		c.streak, c.lastOff = 0, true;
+		return math.random(80, 92) / 100, true;
+	end;
+	c.streak, c.lastOff = (c.streak or 0) + 1, false;
+	return math.max(.01, math.min(1, base + (math.random() - .5) * .02)), false;
+end;
+function c.step(t, o)	if K.phase == "IDLE" then
 		if o ~= "" then
 			return;
 		end;
@@ -585,7 +597,7 @@ function c.step(t, o)
 	K.status = string.format("charging %d%%", math.floor(B * 100));
 	local s = c.s;
 	if not s or s.pressAt ~= K.castPressAt then
-		local target, off = G.pickCastTarget();
+		local target, off = c.pickTarget();
 		s = { pressAt = K.castPressAt, n = 0, dt = 16, e = target, off = off };
 		c.s = s;
 	end;
@@ -648,19 +660,6 @@ function c.step(t, o)
 		K.status = string.format("cast at %d%% (aimed %.1f%%%s)", math.floor(B * 100), aim * 100, s.off and ", off target on purpose" or "");
 		E("WAIT");
 	end;
-end;
-function G.pickCastTarget()
-	local base = math.max(.01, math.min(1, x.castPct / 100));
-	if not x.castRandom then
-		return base, false;
-	end;
-	G.castStreak = (G.castStreak or 0) + 1;
-	G.castLimit = G.castLimit or math.random(3, 6);
-	if G.castStreak > G.castLimit then
-		G.castStreak, G.castLimit = 0, math.random(3, 6);
-		return math.random(80, 92) / 100, true;
-	end;
-	return math.max(.01, math.min(1, base + (math.random() - .5) * .02)), false;
 end;
 local T = {
 		stage = "SEEK",
@@ -1102,9 +1101,6 @@ function eq.load()
 				if type(d[key]) == "boolean" then
 					x[key] = d[key];
 				end;
-			end;
-			if type(d.castPct) == "number" then
-				x.castPct = math.max(1, math.min(100, d.castPct));
 			end;
 			if type(d.lockPos) == "number" and type(d.lockSize) == "number" then
 				Y = d.lockPos;
@@ -2630,7 +2626,6 @@ end;
 				writefile(eq.file, game:GetService("HttpService"):JSONEncode({
 					menuKey = ui.Keybind,
 					theme = ui.Theme,
-					castPct = x.castPct,
 					castRandom = x.castRandom and true or false,
 					autoEquipPick = x.autoEquipPick and true or false,
 					pickKey = x.pickKey,
@@ -2684,20 +2679,6 @@ end;
 				G.unload();
 			end;
 		end;
-		local function slider(tab, flag, title, min, max, step, desc)
-			return tab:AddSlider({
-				Title = title,
-				Description = desc or "",
-				Min = min,
-				Max = max,
-				Step = step,
-				Default = x[flag],
-				Callback = function(t)
-					x[flag] = t;
-					G.saveSettings();
-				end,
-			});
-		end;
 		local fish = ui:AddTab({ Title = "Fish", Icon = "bolt" });
 		local mine = ui:AddTab({ Title = "Mine", Icon = "layers" });
 		local farm = ui:AddTab({ Title = "Farm", Icon = "shield" });
@@ -2709,10 +2690,9 @@ end;
 					x.weaponKey = k;
 					G.saveSettings();
 				end });
-		slider(fish, "castPct", "Release at", 1, 100, 1, "Cast power release, in %");
 		fish:AddToggle({
 			Title = "Random casts",
-			Description = "Misses a perfect every 3-6 casts",
+			Description = "Mixes in non-perfect casts at random",
 			Default = x.castRandom and true or false,
 			Callback = function(t)
 				x.castRandom = t;
