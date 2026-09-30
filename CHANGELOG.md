@@ -6,6 +6,13 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.0.10c - 2026-09-30
+
+- Gets right up to the ore. It used to stop about 10 studs from the ore's first part, which on some rocks is too far to hit. Now it aims at the middle of the ore crystals and walks straight in until it bumps into the rock. If a swing still doesn't start a mining bar it steps closer and tries again, and after 4 misses it moves on to another ore.
+- The broken-ore check (health bar gone after it was showing) now works whatever the walker is doing, not only while it's swinging.
+- The ore is also checked straight after every swing, as soon as the swing or mining bar ends, on top of the regular check every 0.4 seconds.
+- Walk to ores writes `[mine]` lines to the log: which ore it picked, each state change, and what it reads from the ore (`Mined` and its type, health bar, HP). Useful for tracking down why it doesn't move on.
+
 ## 1.0.10b - 2026-09-30
 
 - Notices when an ore breaks. A broken ore keeps all its pieces and even still starts a mining bar when you hit it; what changes is that it gets `Mined=true` and its health bar disappears. Walk to ores now watches for both, then moves on to the next ore. The mining status shows the ore's HP while it works.

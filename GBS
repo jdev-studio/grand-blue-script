@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.10b";
+G.VERSION = "1.0.10c";
 G.UPDATED = "2026-09-30";
-G.NOTE = "Ore walking: notices broken ores, stays level, digs through walls";
+G.NOTE = "Ore walking gets right up to the ore";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -2685,9 +2685,35 @@ local mt = {
 		ARRIVE = 10,
 		NEAR = 16,
 	};
+function mt.dbg(msg)
+	pcall(G.log, "[mine] " .. tostring(msg));
+end;
 function mt.inArea(p)
 	local b = mt.area;
 	return p.X >= b.minX and p.X <= b.maxX and p.Z >= b.minZ and p.Z <= b.maxZ;
+end;
+function mt.center(ore)
+	local okc, parts = pcall(function()
+			return ore:GetChildren();
+		end);
+	local sx, sy, sz, n = 0, 0, 0, 0;
+	for _, pc in ipairs(okc and parts or {}) do
+		local okn, nm = pcall(function()
+				return pc.Name;
+			end);
+		if okn and nm == "Ore" then
+			local okp, pos = pcall(function()
+					return pc.Position;
+				end);
+			if okp and typeof(pos) == "Vector3" then
+				sx, sy, sz, n = sx + pos.X, sy + pos.Y, sz + pos.Z, n + 1;
+			end;
+		end;
+	end;
+	if n == 0 then
+		return nil;
+	end;
+	return Vector3.new(sx / n, sy / n, sz / n);
 end;
 function mt.folder()
 	return R("mtFolder", function()
@@ -2722,7 +2748,7 @@ function mt.scan()
 							return ch:GetAttribute("ObjectType");
 						end);
 					if okt and kind == "Ore" then
-						local pos = u(ch);
+						local pos = mt.center(ch) or u(ch);
 						if pos and mt.inArea(pos) then
 							found[#found + 1] = { name = nm, pos = pos };
 						end;
@@ -2747,6 +2773,7 @@ function mt.check(ore, now)
 	local okm, mined = pcall(function()
 			return inst:GetAttribute("Mined");
 		end);
+	ore.minedRaw = okm and (type(mined) .. ":" .. tostring(mined)) or "error";
 	if okm and (mined == true or tostring(mined) == "true") then
 		return nil;
 	end;
@@ -2810,7 +2837,7 @@ function mt.reset()
 end;
 function mt.setTarget(ore, inst, kind, now, char)
 	mt.target, mt.inst, mt.kind, mt.state = ore, inst, kind, "WALK";
-	mt.bestDist, mt.progressAt, mt.checkAt, mt.digs, mt.ups, mt.sawBar, mt.hp = math.huge, now, now, 0, 0, false, nil;
+	mt.bestDist, mt.progressAt, mt.checkAt, mt.digs, mt.ups, mt.sawBar, mt.hp, mt.fails = math.huge, now, now, 0, 0, false, nil, 0;
 	m.follow, m.navBest, m.lastPos, m.lastMoveAt, m.strafeUntil, m.octant = nil, nil, nil, now, 0, nil;
 	local okp, params = pcall(function()
 			local rp = RaycastParams.new();
@@ -2827,6 +2854,8 @@ function mt.setTarget(ore, inst, kind, now, char)
 			return rp;
 		end);
 	mt.params = okp and params or nil;
+	mt.lastSeen = nil;
+	mt.dbg(string.format("target %s (%s) at %.0f, %.0f, %.0f", tostring(ore.name), tostring(kind), ore.pos.X, ore.pos.Y, ore.pos.Z));
 end;
 function mt.step(now)
 	if not x.mineTravel then
@@ -2850,10 +2879,21 @@ function mt.step(now)
 		m.key(A.SPACE, false);
 	end;
 	local busy = w.phase == "QTE" or w.phase == "SWING" or w.phase == "COOLDOWN";
+	if w.phase ~= mt.lastPhase then
+		if mt.lastPhase == "QTE" or mt.lastPhase == "SWING" then
+			mt.checkAt = -1000000000.0;
+		end;
+		mt.lastPhase = w.phase;
+	end;
 	if mt.target and now - mt.checkAt >= 400 then
 		mt.checkAt = now;
 		local inst, _, hasBar, hp = mt.check(mt.target, now);
-		if inst and mt.state == "MINE" then
+		local seen = string.format("Mined %s, health bar %s, %s", tostring(mt.target.minedRaw), hasBar and "yes" or "no", tostring(hp or "no HP"));
+		if seen ~= mt.lastSeen then
+			mt.lastSeen = seen;
+			mt.dbg(tostring(mt.target.name) .. ": " .. seen);
+		end;
+		if inst then
 			if hasBar then
 				mt.sawBar, mt.hp = true, hp;
 			elseif mt.sawBar then
@@ -2896,18 +2936,22 @@ function mt.step(now)
 	local dy = me.Y - ore.pos.Y;
 	local levelOk = dy >= -4 and dy <= 5;
 	if mt.state == "MINE" then
-		if (dist > mt.ARRIVE + 6 or not levelOk) and not busy then
+		if w.phase == "QTE" then
+			mt.fails = 0;
+		end;
+		if (dist > mt.NEAR + 2 or not levelOk) and not busy then
 			mt.state = dy > 5 and "UP" or "WALK";
 			mt.bestDist, mt.progressAt, mt.upAt = math.huge, now, now;
 		else
-			if w.noBar - mt.noBarStart >= 3 then
-				mt.blacklist[ore.name] = now + 60000;
-				pcall(notify, "Couldn't mine that " .. tostring(mt.kind) .. " from here, trying another ore", 3);
-				mt.reset();
-				return;
-			end;
-			if dist > mt.ARRIVE + 2 and w.phase == "IDLE" and now - mt.mineAt > 1500 then
-				mt.state, mt.nearAt, mt.nearBest = "NEAR", now, dist;
+			if w.noBar > mt.noBarStart and w.phase == "IDLE" then
+				mt.fails = (mt.fails or 0) + 1;
+				if mt.fails >= 4 then
+					mt.blacklist[ore.name] = now + 60000;
+					pcall(notify, "Couldn't mine that " .. tostring(mt.kind) .. " from here, trying another ore", 3);
+					mt.reset();
+					return;
+				end;
+				mt.state, mt.nearAt, mt.nearBest, mt.nearBlockUntil = "NEAR", now, math.huge, nil;
 				return;
 			end;
 			w.step(now);
@@ -2975,12 +3019,12 @@ function mt.step(now)
 		if dist < mt.nearBest - .5 then
 			mt.nearBest, mt.nearAt = dist, now;
 		end;
-		if dist <= mt.ARRIVE and levelOk then
+		if dist <= 3.5 and levelOk then
 			mt.stopMoving();
 			mt.state, mt.faceAt = "FACE", now;
 			return;
 		end;
-		if now - mt.nearAt > 800 then
+		if now - mt.nearAt > 500 then
 			if levelOk then
 				mt.stopMoving();
 				mt.state, mt.faceAt = "FACE", now;
@@ -3300,6 +3344,10 @@ do
 		end;
 		if w.running then
 			local t, o = pcall(mt.step, k());
+			if mt.state ~= mt.logState then
+				mt.logState = mt.state;
+				mt.dbg("state " .. tostring(mt.state) .. " | " .. tostring(w.status));
+			end;
 			if not t then
 				g.releaseAll();
 				w.status = "error: " .. tostring(o);
