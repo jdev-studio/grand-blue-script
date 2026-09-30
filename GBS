@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.10c";
+G.VERSION = "1.0.10d";
 G.UPDATED = "2026-09-30";
-G.NOTE = "Ore walking gets right up to the ore";
+G.NOTE = "Ore walking finds respawned ores straight away";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -2872,7 +2872,7 @@ function mt.step(now)
 		end;
 		return w.step(now);
 	end;
-	if not mt.scanning and (now - mt.scanAt > 60000 or (#mt.ores == 0 and now - mt.scanAt > 5000)) then
+	if not mt.scanning and (now - mt.scanAt > 20000 or (#mt.ores == 0 and now - mt.scanAt > 3000)) then
 		mt.scan();
 	end;
 	if m.keys[A.SPACE] and now >= m.jumpUntil then
@@ -2901,7 +2901,7 @@ function mt.step(now)
 			end;
 		end;
 		if not inst then
-			if mt.state == "MINE" then
+			if mt.state == "MINE" or mt.state == "DIG" or mt.sawBar then
 				mt.mined = mt.mined + 1;
 				mt.blacklist[mt.target.name] = now + 20000;
 				pcall(notify, "Finished that " .. tostring(mt.kind) .. ", looking for the next ore", 3);
@@ -2917,7 +2917,7 @@ function mt.step(now)
 		end;
 		local ore, inst, kind, dist = mt.pick(me, now);
 		if not ore then
-			if not mt.scanning and now - mt.scanAt > 10000 then
+			if not mt.scanning and now - mt.scanAt > 3000 then
 				mt.scan();
 			end;
 			mt.stopMoving();
@@ -2934,7 +2934,7 @@ function mt.step(now)
 	local dist = math.sqrt(dx * dx + dz * dz);
 	local ux, uz = dx / math.max(dist, .001), dz / math.max(dist, .001);
 	local dy = me.Y - ore.pos.Y;
-	local levelOk = dy >= -4 and dy <= 5;
+	local levelOk = dy >= -8 and dy <= 5;
 	if mt.state == "MINE" then
 		if w.phase == "QTE" then
 			mt.fails = 0;

@@ -6,6 +6,12 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.0.10d - 2026-09-30
+
+- Moves on to the next ore straight away. A respawned ore comes back as a new object with a new name, so the list of ores went stale and after a break it could sit for 10+ seconds until the next rescan. It now rescans as soon as it has nothing to go to (at most every 3 seconds) and every 20 seconds otherwise.
+- The height check allows for the ore crystals sitting up on the rock: it mines from up to 8 studs below the crystals (was 4), so it stops walking and digging when it's already hitting the ore.
+- Counts an ore as finished (and says so) even when it broke during a dig swing.
+
 ## 1.0.10c - 2026-09-30
 
 - Gets right up to the ore. It used to stop about 10 studs from the ore's first part, which on some rocks is too far to hit. Now it aims at the middle of the ore crystals and walks straight in until it bumps into the rock. If a swing still doesn't start a mining bar it steps closer and tries again, and after 4 misses it moves on to another ore.
