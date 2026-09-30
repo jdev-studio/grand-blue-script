@@ -6,6 +6,14 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.0.10f - 2026-09-30
+
+- Leaves out ores it can't reach: any ore whose rock sits more than 8 studs above you (like the Iron Ore up on the cliff) is never picked. As a backstop, an ore it hasn't reached within 30 seconds is skipped for 3 minutes, so it can't run in circles.
+- Tunnels properly: once it has dug once on the way to an ore, the next time it's blocked it digs again after 0.7 seconds instead of 2, so it goes hit, walk, hit, walk until it reaches the ore.
+- No extra hit after the ore breaks: the server's `Mined` flag can arrive a moment after the last hit, by which time the next swing had already started. When the ore is down to 1 HP it now waits up to 1.2 seconds for the break before swinging again.
+- Hugs the ore: stops right at the rock's edge (or wherever it bumps into it) instead of a stud or two outside it.
+- It no longer drops the ore it's walking to when a detour takes it a little past the edge of the mining area (it used to go back to swinging on the spot).
+
 ## 1.0.10e - 2026-09-30
 
 - Stops swinging once the ore is broken. The miner starts its next swing by itself when a cooldown ends, and the walker kept letting it, so after an ore broke it kept hitting it (a broken ore still starts a mining bar). The miner now only swings while the walker is actually mining or digging.

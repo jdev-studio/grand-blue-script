@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.10e";
+G.VERSION = "1.0.10f";
 G.UPDATED = "2026-09-30";
-G.NOTE = "Ore walking: stands beside the ore, no extra swings";
+G.NOTE = "Ore walking: skips high ores, tunnels, hugs the ore";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -2691,9 +2691,9 @@ local mt = {
 function mt.dbg(msg)
 	pcall(G.log, "[mine] " .. tostring(msg));
 end;
-function mt.inArea(p)
-	local b = mt.area;
-	return p.X >= b.minX and p.X <= b.maxX and p.Z >= b.minZ and p.Z <= b.maxZ;
+function mt.inArea(p, margin)
+	local b, e = mt.area, margin or 0;
+	return p.X >= b.minX - e and p.X <= b.maxX + e and p.Z >= b.minZ - e and p.Z <= b.maxZ + e;
 end;
 function mt.center(ore)
 	local okc, parts = pcall(function()
@@ -2845,7 +2845,12 @@ function mt.pick(me, now)
 	local best, bestD, bestInst, bestKind = nil, math.huge, nil, nil;
 	for _, ore in ipairs(mt.ores) do
 		local dist = d(ore.pos, me);
-		if dist < bestD then
+		local tooHigh = ore.bottom and ore.bottom > me.Y + 8;
+		if tooHigh and not ore.saidHigh then
+			ore.saidHigh = true;
+			mt.dbg(string.format("skipping %s, it sits too high up (rock bottom %.0f, you are at %.0f)", tostring(ore.name), ore.bottom, me.Y));
+		end;
+		if dist < bestD and not tooHigh then
 			local inst, kind = mt.check(ore, now);
 			if inst then
 				best, bestD, bestInst, bestKind = ore, dist, inst, kind;
@@ -2865,7 +2870,8 @@ end;
 function mt.setTarget(ore, inst, kind, now, char)
 	mt.target, mt.inst, mt.kind, mt.state = ore, inst, kind, "WALK";
 	mt.bestDist, mt.progressAt, mt.checkAt, mt.digs, mt.ups, mt.sawBar, mt.hp, mt.fails = math.huge, now, now, 0, 0, false, nil, 0;
-	mt.stopDist = math.min(math.max(ore.radius + 2.5, 3.5), 14);
+	mt.stopDist = math.min(math.max(ore.radius + .8, 3), 13);
+	mt.targetAt, mt.reachedAt, mt.digMode, mt.hpHoldAt = now, nil, false, nil;
 	m.follow, m.navBest, m.lastPos, m.lastMoveAt, m.strafeUntil, m.octant = nil, nil, nil, now, 0, nil;
 	local okp, params = pcall(function()
 			local rp = RaycastParams.new();
@@ -2895,7 +2901,7 @@ function mt.step(now)
 	local okp, me = pcall(function()
 			return root.Position;
 		end);
-	if not (okp and typeof(me) == "Vector3") or not mt.inArea(me) then
+	if not (okp and typeof(me) == "Vector3") or not mt.inArea(me, mt.target and 40 or 0) then
 		if mt.state ~= "IDLE" then
 			mt.reset();
 		end;
@@ -2967,9 +2973,30 @@ function mt.step(now)
 	local onTop = me.Y > ore.top + 1 and dist < ore.radius + 1;
 	local levelOk = me.Y >= ore.bottom - 4 and me.Y <= ore.top + 3.5 and not onTop;
 	local near = math.max(mt.NEAR, mt.stopDist + 5);
+	if not mt.reachedAt and now - mt.targetAt > 30000 then
+		mt.blacklist[ore.name] = now + 180000;
+		pcall(notify, "Couldn't get to that " .. tostring(mt.kind) .. " in 30 seconds, skipping it for 3 minutes", 3);
+		mt.reset();
+		return;
+	end;
 	if mt.state == "MINE" then
 		if w.phase == "QTE" then
 			mt.fails = 0;
+		end;
+		local hpLeft = mt.hp and tonumber(tostring(mt.hp):match("^%s*(%d+)"));
+		if w.phase == "COOLDOWN" then
+			mt.checkAt = -1000000000.0;
+			if hpLeft and hpLeft <= 1 then
+				mt.hpHoldAt = mt.hpHoldAt or now;
+				if now - mt.hpHoldAt < 1200 then
+					w.hold = true;
+					w.step(now);
+					w.status = "waiting for the ore to break";
+					return;
+				end;
+			end;
+		elseif w.phase ~= "IDLE" then
+			mt.hpHoldAt = nil;
 		end;
 		if (dist > near + 2 or not levelOk) and not busy then
 			mt.state = onTop and "UP" or "WALK";
@@ -3025,6 +3052,7 @@ function mt.step(now)
 		end;
 		mt.stopMoving();
 		mt.state, mt.noBarStart, mt.mineAt = "MINE", w.noBar, now;
+		mt.reachedAt = mt.reachedAt or now;
 		w.status = "mining " .. tostring(mt.kind);
 		return;
 	end;
@@ -3074,7 +3102,7 @@ function mt.step(now)
 	if mt.state == "NEAR" then
 		mt.state, mt.nearBlockUntil = "WALK", now + 3000;
 	end;
-	if now - mt.progressAt > 2000 then
+	if now - mt.progressAt > (mt.digMode and 700 or 2000) then
 		mt.digs = (mt.digs or 0) + 1;
 		if mt.digs > 6 then
 			mt.blacklist[ore.name] = now + 120000;
@@ -3083,7 +3111,7 @@ function mt.step(now)
 			return;
 		end;
 		mt.stopMoving();
-		mt.state, mt.digAt, mt.digSwung = "DIG", now, false;
+		mt.state, mt.digAt, mt.digSwung, mt.digMode = "DIG", now, false, true;
 		return;
 	end;
 	m.params, m.paramsFor = mt.params, char;
