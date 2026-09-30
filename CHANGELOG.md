@@ -6,6 +6,13 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.0.10i - 2026-10-01
+
+- Walks round obstacles instead of digging through them. With no raycasts it feels its way: when it's blocked it follows the edge of whatever is in the way (keeping it on one side) and turns back towards the ore as soon as the way opens. If it can't get round on either side it gives up on that ore instead of jumping or digging. It only tries a single jump, for a small step, when it's away from every ore rock.
+- Stays level with the ore: it only mines a crystal that's between 3 studs below and about 2 studs above its middle. If no crystal is at the right height from where it is, it walks round the ore until one is.
+- Faces the crystal exactly before swinging: it lines itself up so the crystal is straight along one of the 8 directions it can face, faces it, and checks it's within 12 degrees before the swing; if not, it lines up again. Nothing but the crystal is in front of it when it swings.
+- Leaves ores other players are mining. Ores already showing a health bar are picked last, and if the target's HP goes down while it isn't swinging, someone else is on it, so it picks another ore.
+
 ## 1.0.10h - 2026-10-01
 
 - Stops climbing on the ore. 1.0.10g relied on raycasts to see what's in front, but in Matcha a raycast never hits anything (not even the ground), so it always thought the way was clear, walked into the rock, jumped when it got stuck and ended up on top, spinning between getting on and off. Raycasts are no longer used at all.
