@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.1.0";
+G.VERSION = "1.1.1";
 G.UPDATED = "2026-10-01";
-G.NOTE = "Skips broken ores, log and settings save again";
+G.NOTE = "Mining route: all 9 reachable Anchor Town ores";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -2712,11 +2712,51 @@ end;
 local mt = {
 		area = { minX = -508, maxX = -305, minZ = 382, maxZ = 656 },
 		route = {
-			{ -339.0, 5.5, 470.9, 0.88, -0.47, "mine" },
-			{ -392.8, 5.5, 494.1, -0.18, 0.98, "mine" },
-			{ -413.0, 5.5, 461.4, -0.13, -0.99, "mine" },
-			{ -365.8, 5.5, 439.2, 0.51, -0.86, "mine" },
-			{ -444.0, 9.2, 430.6, -0.73, -0.68, "mine" },
+			{ -478.8, 12.3, 453.8, 0.00, 0.00, "walk" },
+			{ -477.3, 10.3, 453.3, 0.00, 0.00, "walk" },
+			{ -457.3, 9.3, 433.3, 0.00, 0.00, "walk" },
+			{ -445.8, 9.3, 432.8, 0.00, 0.00, "walk" },
+			{ -444.0, 9.2, 430.6, -0.68, -0.73, "mine" }, -- ore 2546
+			{ -438.8, 9.3, 430.8, 0.00, 0.00, "walk" },
+			{ -437.3, 5.5, 431.3, 0.00, 0.00, "walk" },
+			{ -406.8, 5.5, 446.8, -0.47, 0.88, "mine" }, -- ore 804
+			{ -365.8, 5.5, 439.2, 0.90, -0.44, "mine" }, -- ore 2166
+			{ -355.3, 5.5, 454.3, 0.00, 0.00, "walk" },
+			{ -339.0, 5.5, 470.9, 0.94, -0.35, "mine" }, -- ore 3177
+			{ -323.3, 5.5, 509.3, 0.00, 0.00, "walk" },
+			{ -320.8, 5.5, 511.8, 0.98, -0.19, "mine" }, -- ore 5611
+			{ -323.3, 5.5, 520.3, 0.00, 0.00, "walk" },
+			{ -330.3, 5.5, 529.3, 0.00, 0.00, "walk" },
+			{ -346.3, 5.5, 556.8, 0.00, 0.00, "jump" },
+			{ -346.8, 8.0, 558.3, 0.00, 0.00, "walk" },
+			{ -348.3, 8.0, 562.8, 0.00, 0.00, "walk" },
+			{ -351.8, 8.0, 566.3, 0.00, 0.00, "walk" },
+			{ -353.3, 8.0, 566.8, 0.00, 0.00, "walk" },
+			{ -359.8, 8.0, 566.8, -0.63, -0.77, "mine" }, -- ore 706
+			{ -359.8, 8.0, 569.8, 0.00, 0.00, "walk" },
+			{ -394.3, 8.0, 616.3, 0.00, 0.00, "walk" },
+			{ -394.8, 8.0, 629.3, 0.00, 0.00, "walk" },
+			{ -395.3, 5.5, 630.8, 0.00, 0.00, "walk" },
+			{ -400.8, 5.5, 650.3, 0.00, 0.00, "walk" },
+			{ -402.3, 5.5, 651.8, -0.76, -0.65, "mine" }, -- ore 2216
+			{ -400.8, 5.5, 649.3, 0.00, 0.00, "walk" },
+			{ -399.8, 5.5, 647.3, 0.00, 0.00, "walk" },
+			{ -399.3, 5.5, 630.8, 0.00, 0.00, "jump" },
+			{ -398.8, 8.0, 629.3, 0.00, 0.00, "walk" },
+			{ -392.8, 8.0, 613.3, 0.00, 0.00, "walk" },
+			{ -392.3, 8.0, 611.8, 0.00, 0.00, "walk" },
+			{ -383.8, 8.0, 601.8, 0.00, 0.00, "walk" },
+			{ -385.3, 8.0, 528.8, 0.00, 0.00, "walk" },
+			{ -385.8, 5.5, 527.3, 0.00, 0.00, "walk" },
+			{ -385.8, 5.5, 504.8, -0.92, 0.40, "mine" }, -- ore 4742
+			{ -387.8, 5.5, 497.3, 0.00, 0.00, "walk" },
+			{ -391.3, 5.5, 493.8, 0.00, 0.00, "walk" },
+			{ -392.8, 5.5, 493.3, 0.00, 0.00, "walk" },
+			{ -403.8, 5.5, 486.3, 0.00, 0.00, "walk" },
+			{ -423.8, 5.5, 473.3, 0.00, 0.00, "walk" },
+			{ -469.8, 13.0, 465.3, 0.00, 0.00, "walk" },
+			{ -486.8, 12.3, 457.3, 0.00, 0.00, "walk" },
+			{ -494.3, 12.3, 453.8, -0.94, -0.35, "mine" }, -- ore 1378
 		},
 		ores = {},
 		scanAt = -1000000000.0,
@@ -2957,7 +2997,7 @@ function mt.nav(now, me, gx, gz, allowJump, moved)
 			end;
 		end;
 		if n.mode == "direct" then
-			m.key(A.SPACE, now < (n.waitUntil or 0) and m.keys[A.SPACE] or false);
+			m.key(A.SPACE, (now < (n.waitUntil or 0) or now < m.jumpUntil) and m.keys[A.SPACE] or false);
 			m.steer(ux, uz);
 			return dist;
 		end;
@@ -2986,7 +3026,7 @@ function mt.nav(now, me, gx, gz, allowJump, moved)
 	end;
 	local a = math.rad(n.angle) * n.side;
 	local c, s = math.cos(a), math.sin(a);
-	m.key(A.SPACE, false);
+	m.key(A.SPACE, now < m.jumpUntil and m.keys[A.SPACE] or false);
 	m.steer(ux * c - uz * s, uz * c + ux * s);
 	return dist;
 end;
@@ -3002,7 +3042,7 @@ function mt.mode()
 end;
 function mt.isMine(i)
 	local pt = mt.route[i];
-	return pt ~= nil and pt[6] ~= "walk";
+	return pt ~= nil and pt[6] == "mine";
 end;
 function mt.mineCount()
 	local n = 0;
@@ -3249,7 +3289,7 @@ function mt.step(now)
 		mt.state = "FACE";
 	end;
 	if mt.state == "GO" then
-		local tol = mt.isMine(i) and 1 or 3;
+		local tol = pt[6] == "mine" and 1 or pt[6] == "jump" and 1.2 or 2;
 		local stepIn = mt.isMine(i) and mt.canRotate == false;
 		local gx, gz = pt[1], pt[3];
 		if stepIn then
@@ -3280,11 +3320,21 @@ function mt.step(now)
 			end;
 			return mt.idle(now, string.format("walking to spot %d (%d studs)", i, math.floor(flat)));
 		end;
-		mt.stopMoving();
 		if not mt.isMine(i) then
+			-- walk and jump points: keep moving, jump points jump onto the ledge ahead
+			if pt[6] == "jump" then
+				m.jump(now);
+			end;
 			mt.advance(now);
 			return mt.idle(now);
 		end;
+		if me.Y - pt[2] > 2.5 then
+			-- ended up on top of the rock: step back off it before mining
+			m.key(A.SPACE, false);
+			m.steer(-pt[4], -pt[5]);
+			return mt.idle(now, "stepping off the ore");
+		end;
+		mt.stopMoving();
 		mt.dbg(string.format("reached spot %d, %.1f studs from the recorded spot, %.1f %s", i, flat, math.abs(me.Y - pt[2]), me.Y >= pt[2] and "higher" or "lower"));
 		if mt.spotOre(i, now) == "broken" then
 			mt.skip(now, i, "the ore there is broken");

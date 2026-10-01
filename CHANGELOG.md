@@ -6,6 +6,14 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.1.1 - 2026-10-01
+
+- New Anchor Town mining route that goes to all 9 ores you can actually reach, in one loop round the mine. The paths were worked out from a map of every solid part in the mine (rocks, walls, ledges), so it walks round obstacles instead of into them.
+- Ores you can't get to are left out: the one up on the hill, and the two on the west ledge that are walled in by cliffs.
+- It jumps at the two spots where the route steps up onto higher ground, aimed at the landing spot.
+- Every mine spot is on the ground beside the ore, close enough to swing and facing the nearest crystal. If the character ends up on top of a rock, it steps back off before swinging.
+- It doesn't stop at the points along the way, so it keeps full running speed between ores.
+
 ## 1.1.0 - 2026-10-01
 
 - Mining skips broken ores. The ore scan ran in a background thread that paused between batches, and in Matcha those paused threads never carry on, so the scan never finished and the script didn't know which ores were broken. It swung at every spot on the route, even ores already marked Mined. The scan now runs a batch every frame from the main loop.
