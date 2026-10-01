@@ -6,6 +6,13 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.1.3 - 2026-10-02
+
+- Fixed bad (erm) casts. Before the cast bar showed up, the script let go and pressed again every 0.25 s in case the click hadn't registered. It waited for the game's QTEEvent, which comes from the server and can arrive later than that, so on a slower connection it let go while the bar was already charging and the cast went out at around 24%. It now reads the cast bar on screen as soon as it appears, and waits 0.7 s before deciding a click didn't register.
+- The cursor no longer gets stuck on the bait panel. After shaking, the cursor was left wherever the last shake button was, often on the bait panel, and casting clicked the panel instead of casting. Every cast now moves the cursor to the middle of the screen over the water first. The spots it moves to when a game button is in the way also stay clear of the bait panel now.
+- Clicking the menu no longer makes you swing or cast while nothing is running (needs JDUI 1.0.4). While Auto Fish, Auto Mine or the chicken farm is on, the game still gets clicks over the menu so the script's own clicks aren't lost.
+- The log (grandblue_log.txt) now has a line for every cast: where it let go, what it aimed for, where the bar actually stopped, and casts that ended before the script let go.
+
 ## 1.1.2 - 2026-10-01
 
 - Mining no longer gets stuck when a game button is under the mouse. The popup guard skipped the click but still counted it as a swing, so every ore said "No mining bar" and the mouse was never moved. It now moves the mouse to a clear spot first, like casting does.

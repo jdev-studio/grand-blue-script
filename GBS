@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.1.2";
-G.UPDATED = "2026-10-01";
-G.NOTE = "Mining: moves the cursor off game buttons, says what tool you hold";
+G.VERSION = "1.1.3";
+G.UPDATED = "2026-10-02";
+G.NOTE = "Fixes erm casts and the cursor sticking on the bait panel";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -50,7 +50,7 @@ local x = {
 		mineSwings = 2,
 		castTimeoutMs = 2500,
 		recastAfterReelMs = 1000,
-		castRepressMs = 250,
+		castRepressMs = 700,
 		idleTimeoutMs = 20000,
 		clickHoldMs = 15,
 		clickGapMs = 8,
@@ -415,7 +415,7 @@ function cg.safeSpot()
 	if not (ok and vp) then
 		return nil;
 	end;
-	for _, f in ipairs({ { .5, .3 }, { .3, .45 }, { .7, .45 }, { .25, .25 }, { .75, .25 }, { .5, .6 }, { .15, .5 }, { .85, .5 } }) do
+	for _, f in ipairs({ { .5, .4 }, { .5, .3 }, { .42, .35 }, { .58, .35 }, { .5, .22 }, { .38, .45 }, { .62, .3 } }) do
 		local sx, sy = vp.X * f[1], vp.Y * f[2];
 		if not cg.blocker(sx, sy) then
 			return sx, sy;
@@ -628,7 +628,14 @@ function c.watch(t)
 	if not c.sentAt then
 		return;
 	end;
-	if not c.readFill() then
+	local after = c.readFill();
+	if after then
+		c.afterFill, c.afterAt, c.afterN = after, t, (c.afterN or 0) + 1;
+	elseif c.afterFill then
+		pcall(G.log, string.format("[cast] bar last read at %.1f%%, %dms after letting go (%d readings after)", c.afterFill * 100, math.floor(c.afterAt - c.sentAt), c.afterN or 0));
+		c.afterFill = nil;
+	end;
+	if not after then
 		local d = t - c.sentAt;
 		if d > 0 and d < 400 then
 			c.lats = c.lats or {};
@@ -662,12 +669,32 @@ function c.pickTarget()
 	c.streak, c.lastOff = (c.streak or 0) + 1, false;
 	return math.max(.01, math.min(1, base + (math.random() - .5) * .02)), false;
 end;
+function c.aimCursor(t)
+	local ok, vp = pcall(function()
+			return workspace.CurrentCamera.ViewportSize;
+		end);
+	if not (ok and vp and vp.X > 100 and vp.Y > 100) then
+		return true;
+	end;
+	local tx, ty = vp.X * .5, vp.Y * .4;
+	local mx, my = g.readMouse();
+	if mx and math.abs(mx - tx) <= 30 and math.abs(my - ty) <= 30 then
+		return t - (c.aimAt or -1000000000.0) >= 80;
+	end;
+	g.moveTo(tx, ty);
+	c.aimAt = t;
+	return false;
+end;
 function c.step(t, o)	if K.phase == "IDLE" then
 		if o ~= "" then
 			return;
 		end;
 		if t < K.recastAt then
 			K.status = string.format("recast in %dms", K.recastAt - t);
+			return;
+		end;
+		if not c.aimCursor(t) then
+			K.status = "moving the cursor to cast";
 			return;
 		end;
 		g.press(true);
@@ -681,7 +708,8 @@ function c.step(t, o)	if K.phase == "IDLE" then
 		return;
 	end;
 	local B, G = nil, nil;
-	if o == "Timed Release" then
+	if o == "Timed Release" or o == "" then
+		-- the bar on screen shows up before the server's QTEEvent does, so trust it as soon as it's there
 		B, G = c.readFill();
 	end;
 	if not B then
@@ -694,7 +722,7 @@ function c.step(t, o)	if K.phase == "IDLE" then
 			if g.mouseHeld and t - K.castPressAt >= x.castRepressMs then
 				g.release();
 				K.castPressAt = t;
-			elseif not g.mouseHeld and t - K.castPressAt >= 50 then
+			elseif not g.mouseHeld and t - K.castPressAt >= 50 and c.aimCursor(t) then
 				g.press(true);
 				K.castPressAt = t;
 				K.castRepresses = K.castRepresses + 1;
@@ -767,8 +795,13 @@ function c.step(t, o)	if K.phase == "IDLE" then
 		pcall(mouse1release);
 		g.mouseHeld = false;
 		c.sentAt = t;
+		c.afterFill, c.afterN = nil, 0;
 		K.lastCastAim = aim;
 		K.status = string.format("cast at %d%% (aimed %.1f%%%s)", math.floor(B * 100), aim * 100, s.off and ", off target on purpose" or "");
+		local gg = _G.GrandBlueFishMine;
+		if gg and gg.log then
+			pcall(gg.log, string.format("[cast] let go at %.1f%%, target %.1f%%, expected to land at %.1f%%, delay %dms%s", B * 100, e * 100, aim * 100, math.floor(c.lat or 0), s.off and ", off target on purpose" or ""));
+		end;
 		E("WAIT");
 	end;
 end;
@@ -1316,6 +1349,8 @@ local function D()
 		elseif B == "Timed Release" then
 			if K.phase == "CHARGE" then
 				g.release();
+				local s = c.s;
+				pcall(G.log, "[cast] the cast bar ended before the script let go (" .. (s and string.format("%d fill readings, last %.1f%%", s.n or 0, (s.f or 0) * 100) or "never read the bar") .. ")");
 			end;
 			E("WAIT");
 		end;
@@ -3592,6 +3627,10 @@ end;
 		end;
 		ui.InputGuard = function()
 			return g.mouseHeld;
+		end;
+		-- clicks on the menu don't reach the game, except while a feature is running (its own clicks may land under the menu)
+		ui.CaptureGuard = function()
+			return not (K.running or w.running or m.running);
 		end;
 		local origDestroy = ui.Destroy;
 		ui.Destroy = function(self)
