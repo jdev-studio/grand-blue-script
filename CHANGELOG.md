@@ -6,6 +6,12 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.1.0 - 2026-10-01
+
+- Mining skips broken ores. The ore scan ran in a background thread that paused between batches, and in Matcha those paused threads never carry on, so the scan never finished and the script didn't know which ores were broken. It swung at every spot on the route, even ores already marked Mined. The scan now runs a batch every frame from the main loop.
+- The log file (grandblue_log.txt) is written again. In 1.0.12 it stopped after the first line for the same reason. It's now saved from the main loop at most once a second, and straight away when the script unloads.
+- Settings save again. Saving used the same kind of paused thread, so on Matcha your menu key, theme, mining mode and other settings weren't being saved. They're now saved from the main loop 0.4 seconds after a change.
+
 ## 1.0.12 - 2026-10-01
 
 - Shake clicks are never blocked by other game screens again. 1.0.9 made the shake wait whenever another button was under the cursor, and before every shake click it searched the whole game UI, which slowed shaking down. Shake now clicks as fast as it did before 1.0.9. Casting, mining and fighting still avoid clicking game popups.

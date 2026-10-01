@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.12";
+G.VERSION = "1.1.0";
 G.UPDATED = "2026-10-01";
-G.NOTE = "Shake clicks never blocked, faster script";
+G.NOTE = "Skips broken ores, log and settings save again";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -25,15 +25,7 @@ function G.log(msg)
 	if #L > 200 then
 		table.remove(L, 1);
 	end;
-	if not G.logDirty then
-		task.spawn(function()
-			task.wait(1);
-			if G.logDirty and not G.dead then
-				G.flushLog();
-			end;
-		end);
-		G.logDirty = true;
-	end;
+	G.logDirty = true;
 end;
 function G.flushLog()
 	G.logDirty = false;
@@ -2786,56 +2778,66 @@ function mt.scan()
 	if mt.scanning then
 		return;
 	end;
-	mt.scanning = true;
-	task.spawn(function()
-		pcall(function()
-			local folder = mt.folder();
-			local okl, list = pcall(function()
-					return folder:GetChildren();
-				end);
-			if not okl then
-				return;
-			end;
-			local found = {};
-			local kinds, newKinds = mt.kinds or {}, {};
-			for n, ch in ipairs(list) do
-				if n % 250 == 0 then
-					task.wait();
-				end;
-				local okn, nm = pcall(mt.nameOf, ch);
-				nm = okn and tostring(nm) or "";
-				local b1 = string.byte(nm, 1);
-				if (b1 == 79 and nm:sub(1, 8) == "OreBlock") or (b1 == 77 and nm:sub(1, 13) == "ModelObjectId") then
-					local kind = kinds[nm];
-					local okt = kind ~= nil;
-					if not okt then
-						okt, kind = pcall(mt.objType, ch);
-					end;
-					if okt and kind ~= nil then
-						newKinds[nm] = kind;
-					end;
-					if okt and kind == "Ore" then
-						local pos, radius, top, bottom, crystals = mt.center(ch);
-						pos = pos or u(ch);
-						if pos and mt.inArea(pos) then
-							found[#found + 1] = {
-								name = nm,
-								pos = pos,
-								radius = radius or 4,
-								top = top or (pos.Y + 3),
-								bottom = bottom or (pos.Y - 3),
-								crystals = crystals or { pos },
-							};
-						end;
-					end;
-				end;
-			end;
-			mt.ores = found;
-			mt.kinds = newKinds;
+	local folder = mt.folder();
+	local okl, list = pcall(function()
+			return folder:GetChildren();
 		end);
+	if not okl or type(list) ~= "table" then
+		mt.scanAt = k();
+		return;
+	end;
+	mt.scanning = { list = list, i = 0, found = {}, kinds = mt.kinds or {}, newKinds = {} };
+end;
+function mt.scanSlice()
+	local sc = mt.scanning;
+	local stop = math.min(#sc.list, sc.i + 250);
+	for n = sc.i + 1, stop do
+		local ch = sc.list[n];
+		local okn, nm = pcall(mt.nameOf, ch);
+		nm = okn and tostring(nm) or "";
+		local b1 = string.byte(nm, 1);
+		if (b1 == 79 and nm:sub(1, 8) == "OreBlock") or (b1 == 77 and nm:sub(1, 13) == "ModelObjectId") then
+			local kind = sc.kinds[nm];
+			local okt = kind ~= nil;
+			if not okt then
+				okt, kind = pcall(mt.objType, ch);
+			end;
+			if okt and kind ~= nil then
+				sc.newKinds[nm] = kind;
+			end;
+			if okt and kind == "Ore" then
+				local pos, radius, top, bottom, crystals = mt.center(ch);
+				pos = pos or u(ch);
+				if pos and mt.inArea(pos) then
+					sc.found[#sc.found + 1] = {
+						name = nm,
+						pos = pos,
+						radius = radius or 4,
+						top = top or (pos.Y + 3),
+						bottom = bottom or (pos.Y - 3),
+						crystals = crystals or { pos },
+					};
+				end;
+			end;
+		end;
+	end;
+	sc.i = stop;
+	if stop >= #sc.list then
+		mt.ores, mt.kinds = sc.found, sc.newKinds;
 		mt.scanAt = k();
 		mt.scanning = false;
-	end);
+	end;
+end;
+function mt.scanStep()
+	if not mt.scanning then
+		return;
+	end;
+	local ok, err = pcall(mt.scanSlice);
+	if not ok then
+		mt.scanning = false;
+		mt.scanAt = k();
+		mt.dbg("ore scan error: " .. tostring(err));
+	end;
 end;
 function mt.check(ore, now)
 	if (mt.blacklist[ore.name] or 0) > now then
@@ -3166,6 +3168,7 @@ function mt.step(now)
 	if not mt.scanning and now - mt.scanAt > 10000 then
 		mt.scan();
 	end;
+	mt.scanStep();
 	if m.keys[A.SPACE] and now >= m.jumpUntil then
 		m.key(A.SPACE, false);
 	end;
@@ -3501,17 +3504,9 @@ end;
 			end);
 		end;
 		function G.saveSettings()
-			if G.savePending or G.dead then
-				return;
+			if not G.dead and not G.saveDue then
+				G.saveDue = tick() + .4;
 			end;
-			G.savePending = true;
-			task.spawn(function()
-				task.wait(.4);
-				G.savePending = false;
-				if not G.dead then
-					G.flushSettings();
-				end;
-			end);
 		end;
 		F.fruits = saved.espFruits == true;
 		F.chests = saved.espChests == true;
@@ -3699,6 +3694,14 @@ do
 			return;
 		end;
 		t = o;
+		if G.logDirty and o - (G.logFlushAt or 0) >= 1 then
+			G.logFlushAt = o;
+			G.flushLog();
+		end;
+		if G.saveDue and o >= G.saveDue and G.flushSettings then
+			G.saveDue = nil;
+			G.flushSettings();
+		end;
 		if K.running then
 			local fought = false;
 			local fok, fres = pcall(fm.step, k());
