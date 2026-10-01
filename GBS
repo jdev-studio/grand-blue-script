@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.0.11";
+G.VERSION = "1.0.12";
 G.UPDATED = "2026-10-01";
-G.NOTE = "Mining route: walk or teleport between the ores";
+G.NOTE = "Shake clicks never blocked, faster script";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -25,7 +25,19 @@ function G.log(msg)
 	if #L > 200 then
 		table.remove(L, 1);
 	end;
-	pcall(writefile, "grandblue_log.txt", table.concat(L, "\n"));
+	if not G.logDirty then
+		task.spawn(function()
+			task.wait(1);
+			if G.logDirty and not G.dead then
+				G.flushLog();
+			end;
+		end);
+		G.logDirty = true;
+	end;
+end;
+function G.flushLog()
+	G.logDirty = false;
+	pcall(writefile, "grandblue_log.txt", table.concat(G.logLines, "\n"));
 end;
 local rawNotify = rawget(_G, "__gbsRawNotify") or notify;
 rawset(_G, "__gbsRawNotify", rawNotify);
@@ -247,11 +259,12 @@ local function V(t)
 	end;
 	return B.X, B.Y, G.X, G.Y;
 end;
+local function myRootFind()
+	local t = r();
+	return S(t and t.Character, "HumanoidRootPart");
+end;
 local function l()
-	return R("myRoot", function()
-		local t = r();
-		return S(t and t.Character, "HumanoidRootPart");
-	end, 1);
+	return R("myRoot", myRootFind, 1);
 end;
 local function f()
 	if type(isrbxactive) ~= "function" then
@@ -385,15 +398,13 @@ function cg.scan(t)
 	cg.list, cg.qteOrder = list, qteOrder;
 	return list;
 end;
-function cg.blocker(px, py, forShake)
+function cg.blocker(px, py)
 	if not (px and py) then
 		return nil;
 	end;
 	for _, b in ipairs(cg.scan(k())) do
 		if px >= b.x and px <= b.x + b.w and py >= b.y and py <= b.y + b.h then
-			if not (forShake and b.order and cg.qteOrder and b.order < cg.qteOrder) then
-				return b.path;
-			end;
+			return b.path;
 		end;
 	end;
 	return nil;
@@ -880,12 +891,6 @@ function T.step(t)
 			T.moveTo(o.cx, o.cy);
 		end;
 		K.status = "shake: waiting for cursor";
-		return;
-	end;
-	local cover = cg.blocker(mx or o.cx, my or o.cy, true);
-	if cover then
-		cg.warn(cover);
-		K.status = "shake: something is covering the button";
 		return;
 	end;
 	pcall(mouse1press);
@@ -1415,7 +1420,10 @@ function w.step(t)
 	local o = w.phase == "COOLDOWN" or w.phase == "SWING";
 	local B = tostring(i("QTEEvent", o and .1 or nil) or "");
 	local G = w.timer;
-	local Q, e = w.read();
+	local Q, e;
+	if B ~= "" or w.phase == "SWING" or G.sentAt then
+		Q, e = w.read();
+	end;
 	if Q and (B == "" and w.phase == "SWING") then
 		B = tostring(i("QTEEvent", .01) or "");
 	end;
@@ -1504,18 +1512,17 @@ function w.step(t)
 		w.status = "no mining bar (pickaxe out, facing ore?)";
 	end;
 end;
+local function posOf(t)
+	return t.Position;
+end;
 local function u(t)
-	local o, B = pcall(function()
-			return t.Position;
-		end);
+	local o, B = pcall(posOf, t);
 	if o and typeof(B) == "Vector3" then
 		return B;
 	end;
 	local G, x = pcall(t.GetChildren, t);
 	for t, o in ipairs(G and x or {}) do
-		local B, G = pcall(function()
-				return o.Position;
-			end);
+		local B, G = pcall(posOf, o);
 		if B and typeof(G) == "Vector3" then
 			return G;
 		end;
@@ -1525,9 +1532,7 @@ local function u(t)
 		if t > 60 then
 			break;
 		end;
-		local B, G = pcall(function()
-				return o.Position;
-			end);
+		local B, G = pcall(posOf, o);
 		if B and typeof(G) == "Vector3" then
 			return G;
 		end;
@@ -1594,10 +1599,14 @@ function m.releaseAll()
 		m.attacking = false;
 	end;
 end;
+local function hRead(t)
+	return t.Parent, t:GetAttribute("NPCType"), t:GetAttribute("Dead");
+end;
+local function nameOf(t)
+	return t.Name;
+end;
 local function H(t)
-	local o, B, G, x = pcall(function()
-			return t.Parent, t:GetAttribute("NPCType"), t:GetAttribute("Dead");
-		end);
+	local o, B, G, x = pcall(hRead, t);
 	return o and (B ~= nil and ((G == "Chicken" or t == m.fightTarget) and not x));
 end;
 local function d(t, o)
@@ -1626,11 +1635,9 @@ function m.pick(t, o)
 		end);
 	local e, v = nil, math.huge;
 	for B, G in ipairs(G and Q or {}) do
-		local Q, k = pcall(function()
-				return G.Name;
-			end);
+		local Q, k = pcall(nameOf, G);
 		local r = Q and string.sub(tostring(k), 1, 7) == "Chicken";
-		if r and (H(G) and not ((((m.blacklist[G] or 0)) > o))) then
+		if r and (not ((((m.blacklist[G] or 0)) > o)) and H(G)) then
 			local o = u(S(G, "HumanoidRootPart") or G);
 			if o then
 				local B = d(o, t);
@@ -1664,11 +1671,21 @@ function m.rayParams(t)
 	return m.params;
 end;
 function m.ground(t, o)
+	if m.rayDead then
+		return t.Y - 2;
+	end;
 	local B, G = pcall(function()
 			return workspace:Raycast(t, Vector3.new(0, -12, 0), o);
 		end);
 	if B and G then
+		m.rayHit = true;
 		return G.Position.Y;
+	end;
+	if not m.rayHit then
+		m.rayMiss = (m.rayMiss or 0) + 1;
+		if m.rayMiss >= 20 then
+			m.rayDead = true;
+		end;
 	end;
 	return t.Y - 2;
 end;
@@ -1682,6 +1699,9 @@ local function z(t)
 	return not ((o and (type(B) == "number" and B > .6)));
 end;
 function m.clear(t, o, B, G, x, Q)
+	if m.rayDead then
+		return true, false, false;
+	end;
 	local e = Vector3.new(o * G, 0, B * G);
 	local v, k = pcall(function()
 			return workspace:Raycast(Vector3.new(t.X, Q + 2.6, t.Z), e, x);
@@ -1873,11 +1893,8 @@ function m.step(t)
 	if m.keys[A.SPACE] and t >= m.jumpUntil then
 		m.key(A.SPACE, false);
 	end;
-	local o = r() and (r()).Character;
 	local B = l();
-	local G, Q = pcall(function()
-			return B.Position;
-		end);
+	local G, Q = pcall(posOf, B);
 	if not ((G and Q)) then
 		m.releaseAll();
 		m.status = "no character";
@@ -1952,6 +1969,7 @@ function m.step(t)
 		g.release();
 		m.attacking = false;
 	end;
+	local o = r() and (r()).Character;
 	m.walkTo(Q, k.X, k.Z, o, e, t);
 	m.status = string.format("walking to chicken (%d studs)", math.floor(S));
 end;
@@ -2104,16 +2122,13 @@ function fm.find(pos, t)
 			local okp, isPet, npc = pcall(function()
 					return e:GetAttribute("Pet") or e:GetAttribute("Summoner") or e:GetAttribute("PlayerCharacter"), e:GetAttribute("NPCType");
 				end);
-			if okp and not isPet and npc ~= nil and fm.alive(e) then
-				local hostileHit = hurt and npc ~= "Chicken";
-				if isFish or hostileHit then
-					local p = u(S(e, "HumanoidRootPart") or e);
-					if p then
-						local dist = d(p, pos);
-						local limit = isFish and x.fightRange or math.min(45, x.fightRange);
-						if dist <= limit and dist < bestD then
-							best, bestD, why = e, dist, name;
-						end;
+			if okp and not isPet and npc ~= nil and (isFish or npc ~= "Chicken") then
+				local p = u(S(e, "HumanoidRootPart") or e);
+				if p then
+					local dist = d(p, pos);
+					local limit = isFish and x.fightRange or math.min(45, x.fightRange);
+					if dist <= limit and dist < bestD and fm.alive(e) then
+						best, bestD, why = e, dist, name;
 					end;
 				end;
 			end;
@@ -2211,6 +2226,10 @@ function fm.beginReturn(t)
 	K.status = "returning to fishing spot";
 end;
 function fm.step(t)
+	if not fm.state and (not x.fightMobs or not fm.homeCF or t - fm.scanAt < 1000) then
+		fm.trackHealth(t);
+		return false;
+	end;
 	local root = l();
 	local ok, pos = pcall(function()
 			return root.Position;
@@ -2447,11 +2466,20 @@ function F.step(t)
 		return;
 	end;
 	F.drawAt = t;
+	if not F.targets[1] then
+		if F.shown then
+			F.hideFrom(1);
+			F.shown = false;
+		end;
+		return;
+	end;
 	local o = l();
-	local B, G = pcall(function()
-			return o.Position;
-		end);
+	local B, G = pcall(posOf, o);
 	local x = 0;
+	local gx, gy, gz;
+	if B and G then
+		gx, gy, gz = G.X, G.Y, G.Z;
+	end;
 	for t, o in ipairs(F.targets) do
 		local Q = o.pos;
 		if o.part then
@@ -2463,9 +2491,9 @@ function F.step(t)
 			end;
 		end;
 		local e = 0;
-		if B and G then
-			local t = Q - G;
-			e = math.sqrt((t.X * t.X + t.Y * t.Y) + t.Z * t.Z);
+		if gx then
+			local dx, dy, dz = Q.X - gx, Q.Y - gy, Q.Z - gz;
+			e = math.sqrt((dx * dx + dy * dy) + dz * dz);
 		end;
 		local v, k, S = pcall(WorldToScreen, Q);
 		if v and S then
@@ -2486,9 +2514,13 @@ function F.step(t)
 				t.text.Position = Vector2.new(G, (Q + B / 2) + 2);
 				t.x, t.y = G, Q;
 			end;
-			local v = o.name .. ("  " .. math.floor(e));
-			if t.label ~= v then
-				t.text.Text, t.label = v, v;
+			local fd = math.floor(e);
+			if t.dist ~= fd or t.nm ~= o.name then
+				t.dist, t.nm = fd, o.name;
+				local v = o.name .. ("  " .. fd);
+				if t.label ~= v then
+					t.text.Text, t.label = v, v;
+				end;
 			end;
 			if not t.vis then
 				t.box.Visible, t.text.Visible, t.vis = true, true, true;
@@ -2618,14 +2650,14 @@ function Be.step(t)
 		local t = o - Q;
 		G = math.floor(math.sqrt((t.X * t.X + t.Y * t.Y) + t.Z * t.Z));
 	end;
-	local e = workspace.CurrentCamera;
-	local v = e.ViewportSize;
 	local k, S, r = pcall(WorldToScreen, o);
 	local J, q, M;
 	if k and r then
 		J, q = S.X, S.Y;
 		M = math.clamp(3000 / math.max(G, 1), 14, 60);
 	else
+		local e = workspace.CurrentCamera;
+		local v = e.ViewportSize;
 		local t = e.CFrame;
 		local B = o - t.Position;
 		local G, x = B:Dot(t.RightVector), -B:Dot(t.UpVector);
@@ -2710,6 +2742,12 @@ function mt.inArea(p, margin)
 	local b, e = mt.area, margin or 0;
 	return p.X >= b.minX - e and p.X <= b.maxX + e and p.Z >= b.minZ - e and p.Z <= b.maxZ + e;
 end;
+function mt.nameOf(p)
+	return p.Name;
+end;
+function mt.objType(p)
+	return p:GetAttribute("ObjectType");
+end;
 function mt.center(ore)
 	local okc, parts = pcall(function()
 			return ore:GetChildren();
@@ -2717,13 +2755,9 @@ function mt.center(ore)
 	local crystals = {};
 	local sx, sy, sz = 0, 0, 0;
 	for _, pc in ipairs(okc and parts or {}) do
-		local okn, nm = pcall(function()
-				return pc.Name;
-			end);
+		local okn, nm = pcall(mt.nameOf, pc);
 		if okn and nm == "Ore" then
-			local okp, pos = pcall(function()
-					return pc.Position;
-				end);
+			local okp, pos = pcall(posOf, pc);
 			if okp and typeof(pos) == "Vector3" then
 				crystals[#crystals + 1] = pos;
 				sx, sy, sz = sx + pos.X, sy + pos.Y, sz + pos.Z;
@@ -2763,18 +2797,23 @@ function mt.scan()
 				return;
 			end;
 			local found = {};
+			local kinds, newKinds = mt.kinds or {}, {};
 			for n, ch in ipairs(list) do
 				if n % 250 == 0 then
 					task.wait();
 				end;
-				local okn, nm = pcall(function()
-						return ch.Name;
-					end);
+				local okn, nm = pcall(mt.nameOf, ch);
 				nm = okn and tostring(nm) or "";
-				if nm:sub(1, 8) == "OreBlock" or nm:sub(1, 13) == "ModelObjectId" then
-					local okt, kind = pcall(function()
-							return ch:GetAttribute("ObjectType");
-						end);
+				local b1 = string.byte(nm, 1);
+				if (b1 == 79 and nm:sub(1, 8) == "OreBlock") or (b1 == 77 and nm:sub(1, 13) == "ModelObjectId") then
+					local kind = kinds[nm];
+					local okt = kind ~= nil;
+					if not okt then
+						okt, kind = pcall(mt.objType, ch);
+					end;
+					if okt and kind ~= nil then
+						newKinds[nm] = kind;
+					end;
 					if okt and kind == "Ore" then
 						local pos, radius, top, bottom, crystals = mt.center(ch);
 						pos = pos or u(ch);
@@ -2792,6 +2831,7 @@ function mt.scan()
 				end;
 			end;
 			mt.ores = found;
+			mt.kinds = newKinds;
 		end);
 		mt.scanAt = k();
 		mt.scanning = false;
@@ -2895,12 +2935,11 @@ function mt.nearAnyOre(me)
 	end;
 	return false;
 end;
-function mt.nav(now, me, gx, gz, allowJump)
+function mt.nav(now, me, gx, gz, allowJump, moved)
 	local n = mt.navState;
 	local dx, dz = gx - me.X, gz - me.Z;
 	local dist = math.sqrt(dx * dx + dz * dz);
 	local ux, uz = dx / math.max(dist, .001), dz / math.max(dist, .001);
-	local moved = mt.moved(me, now);
 	if n.mode == "direct" then
 		if moved and moved < .5 and now >= (n.waitUntil or 0) then
 			if allowJump and not n.jumped and not mt.nearAnyOre(me) then
@@ -3229,7 +3268,7 @@ function mt.step(now)
 				mt.advance(now);
 				return mt.idle(now);
 			end;
-			local _, verdict = mt.nav(now, me, gx, gz, true);
+			local _, verdict = mt.nav(now, me, gx, gz, true, moved);
 			if verdict == "nopath" then
 				pcall(notify, "Can't find a way to spot " .. i .. ", going to the next one", 3);
 				mt.stopMoving();
@@ -3609,6 +3648,9 @@ function G.unload()
 	if G.flushSettings then
 		pcall(G.flushSettings);
 	end;
+	if G.logDirty then
+		pcall(G.flushLog);
+	end;
 	G.dead = true;
 	K.running = false;
 	local t = G.conns;
@@ -3693,15 +3735,19 @@ do
 				m.status = "error: " .. tostring(o);
 			end;
 		end;
-		local B, r = pcall(Be.step, k());
-		if not B then
-			Be.lastError = tostring(r);
-			Be.hide();
+		if Be.on or Be.shown then
+			local B, r = pcall(Be.step, k());
+			if not B then
+				Be.lastError = tostring(r);
+				Be.hide();
+			end;
 		end;
-		local J, q = pcall(F.step, k());
-		if not J then
-			F.lastError = tostring(q);
-			F.hideFrom(1);
+		if F.chests or F.fruits or F.chickens or F.shown or F.count ~= 0 then
+			local J, q = pcall(F.step, k());
+			if not J then
+				F.lastError = tostring(q);
+				F.hideFrom(1);
+			end;
 		end;
 		if ee.toggle and ee.toggle.Value ~= (K.running and true or false) then
 			pcall(function()
@@ -3726,21 +3772,21 @@ do
 		end;
 		if not ee.win and o - (G.keyAt or 0) >= .05 then
 			G.keyAt = o;
-			local t, o = false, false;
-			pcall(function()
-				t = iskeypressed(Q) and true or false;
-				o = iskeypressed(e) and true or false;
-			end);
+			local okq, t = pcall(iskeypressed, Q);
+			t = okq and t and true or false;
+			local o = false;
+			if okq then
+				local oke, pe = pcall(iskeypressed, e);
+				o = oke and pe and true or false;
+			end;
 			if t and not x then
 				L(not K.running);
 			end;
 			if o and not G.lastMineKey then
 				G.setMining(not w.running);
 			end;
-			local B = false;
-			pcall(function()
-				B = iskeypressed(v) and true or false;
-			end);
+			local okv, B = pcall(iskeypressed, v);
+			B = okv and B and true or false;
 			if B and not G.lastChickenKey then
 				G.setFarm(not m.running);
 			end;

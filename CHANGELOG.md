@@ -6,6 +6,21 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.0.12 - 2026-10-01
+
+- Shake clicks are never blocked by other game screens again. 1.0.9 made the shake wait whenever another button was under the cursor, and before every shake click it searched the whole game UI, which slowed shaking down. Shake now clicks as fast as it did before 1.0.9. Casting, mining and fighting still avoid clicking game popups.
+- Faster script overall, with the same behaviour:
+  - While fishing with no fight going on, the fishfolk check does almost nothing each frame instead of reading your position every frame.
+  - Treasure and item ESP are skipped completely when they're off. When item ESP is on with nothing found, it doesn't read your position, and labels are only rebuilt when the distance changes.
+  - Treasure ESP only reads the camera when the dig spot is off screen.
+  - The fishfolk search checks the cheap things (chicken, distance) before checking whether a mob is alive.
+  - Mining only reads the mining bar when it's needed, not on every frame of the cooldown or while walking between ores.
+  - The ore scan skips most objects with a quick name check and remembers each ore's type, so later scans read far less.
+  - Walking the route no longer records your position twice per frame.
+  - Chicken farm: blacklisted chickens are skipped before any game reads, your character is only looked up when walking, and the obstacle rays are switched off once they're shown never to hit (they never do in Matcha).
+  - The log file is written at most once a second instead of on every line, and straight away when the script unloads.
+  - Hotkey checks no longer create new functions 20 times a second.
+
 ## 1.0.11 - 2026-10-01
 
 - Replaced the free-roaming ore walker with a fixed route of 5 Anchor Town ores, recorded standing next to each one. It stands where the route was recorded and faces the same way, so it no longer has to work out where the ore is or how to get next to it.
