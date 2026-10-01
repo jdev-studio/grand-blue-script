@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.1.1";
+G.VERSION = "1.1.2";
 G.UPDATED = "2026-10-01";
-G.NOTE = "Mining route: all 9 reachable Anchor Town ores";
+G.NOTE = "Mining: moves the cursor off game buttons, says what tool you hold";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -1491,7 +1491,10 @@ function w.step(t)
 		if w.hold then
 			return;
 		end;
-		g.press();
+		if not g.press(true) then
+			w.status = "a game button is under the cursor, moving it";
+			return;
+		end;
 		w.swings = w.swings + 1;
 		w.setPhase("SWING", t);
 		w.status = "swinging";
@@ -3395,6 +3398,9 @@ function mt.step(now)
 		mt.swingStart, mt.noBarStart, mt.mineAt, mt.checkAt, mt.broken = w.swings, w.noBar, now, now, false;
 		local _, ore, kind, hp = mt.spotOre(i, now);
 		mt.oreHere, mt.kind, mt.skipped = ore, kind or "ore", 0;
+		if x.autoEquipPick and x.pickKey then
+			eq.ensure("pick", x.pickKey);
+		end;
 		mt.dbg(string.format("mining spot %d: %s%s, %d swings", i, tostring(mt.kind), hp and (" (" .. tostring(hp) .. ")") or "", x.mineSwings));
 	end;
 	if flat > 5 and w.phase ~= "SWING" and w.phase ~= "QTE" then
@@ -3432,7 +3438,15 @@ function mt.step(now)
 		local misses = w.noBar - mt.noBarStart;
 		mt.dbg(string.format("spot %d done: %d swings, %d without a mining bar%s", i, swung, misses, mt.broken and ", the ore broke" or ""));
 		if swung > 0 and misses >= swung then
-			pcall(notify, "No mining bar at spot " .. i .. ", is the pickaxe out?", 3);
+			local tool = equippedTool();
+			if eq.matches("pick", tool) then
+				pcall(notify, "No mining bar at spot " .. i .. " even with the pickaxe out", 3);
+			elseif x.autoEquipPick and x.pickKey then
+				pcall(notify, "No mining bar at spot " .. i .. ": holding " .. (tool and tool.Name or "nothing") .. ", equipping the pickaxe", 3);
+				eq.ensure("pick", x.pickKey);
+			else
+				pcall(notify, "No mining bar at spot " .. i .. ": you're holding " .. (tool and tool.Name or "nothing") .. ". Hold the pickaxe, or set Pickaxe slot and turn on Auto equip pickaxe in the Mine tab", 5);
+			end;
 		end;
 		mt.tpFails = 0;
 		if mode == "tp" then

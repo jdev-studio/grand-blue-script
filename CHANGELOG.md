@@ -6,6 +6,12 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.1.2 - 2026-10-01
+
+- Mining no longer gets stuck when a game button is under the mouse. The popup guard skipped the click but still counted it as a swing, so every ore said "No mining bar" and the mouse was never moved. It now moves the mouse to a clear spot first, like casting does.
+- The "No mining bar" message says what you're holding, and if it isn't the pickaxe, tells you to set Pickaxe slot and Auto equip pickaxe in the Mine tab (those settings are saved per computer).
+- With Auto equip pickaxe on, the pickaxe is checked at every ore instead of only when Auto Mine starts, so it switches back if fishing or a fight changed your tool.
+
 ## 1.1.1 - 2026-10-01
 
 - New Anchor Town mining route that goes to all 9 ores you can actually reach, in one loop round the mine. The paths were worked out from a map of every solid part in the mine (rocks, walls, ledges), so it walks round obstacles instead of into them.
