@@ -6,6 +6,11 @@ The current version is shown in the menu under Settings, and in the notification
 
 Versions up to 1.0.4b were renumbered to this scheme. Their commit messages still use the old numbers, shown in brackets below.
 
+## 1.1.4 - 2026-10-02
+
+- The menu remembers everything you set in it (saved to grandblue_menu.json and loaded next time): Random casts, the weapon and pickaxe slots, Auto equip pickaxe, Walk route / Teleport to ores, Swings per ore, the three ESP toggles, the theme and the menu key. Needs JDUI 1.0.5b.
+- Auto Fish, Auto Mine and Autofarm Chickens are deliberately not remembered, so loading the script never starts farming by itself.
+
 ## 1.1.3 - 2026-10-02
 
 - Fixed bad (erm) casts. Before the cast bar showed up, the script let go and pressed again every 0.25 s in case the click hadn't registered. It waited for the game's QTEEvent, which comes from the server and can arrive later than that, so on a slower connection it let go while the bar was already charging and the cast went out at around 24%. It now reads the cast bar on screen as soon as it appears, and waits 0.7 s before deciding a click didn't register.
