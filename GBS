@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "1.1.4";
+G.VERSION = "0.2.5";
 G.UPDATED = "2026-10-02";
-G.NOTE = "The menu remembers everything you set";
+G.NOTE = "Fixes the lag and no casting from 1.1.3";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -676,12 +676,16 @@ function c.aimCursor(t)
 	if not (ok and vp and vp.X > 100 and vp.Y > 100) then
 		return true;
 	end;
-	local tx, ty = vp.X * .5, vp.Y * .4;
-	local mx, my = g.readMouse();
-	if mx and math.abs(mx - tx) <= 30 and math.abs(my - ty) <= 30 then
-		return t - (c.aimAt or -1000000000.0) >= 80;
+	-- move once per cast, give the game 80ms to see it, then click; the read-back mouse position is
+	-- offset by Roblox's top bar (and the window position), so it is never compared against the target
+	local since = t - (c.aimAt or -1000000000.0);
+	if since < 80 then
+		return false;
 	end;
-	g.moveTo(tx, ty);
+	if since < 1500 then
+		return true;
+	end;
+	g.moveTo(vp.X * .5, vp.Y * .4);
 	c.aimAt = t;
 	return false;
 end;
