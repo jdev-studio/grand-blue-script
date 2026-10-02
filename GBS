@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "0.2.5";
+G.VERSION = "0.2.6";
 G.UPDATED = "2026-10-02";
-G.NOTE = "Fixes the lag and no casting from 1.1.3";
+G.NOTE = "No more lag when fishing starts";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -171,7 +171,7 @@ function q.calibrate()
 		end;
 	end;
 end;
-local function O(t)
+local function O(t, noCal)
 	local o, B = t.AbsolutePosition, t.AbsoluteSize;
 	if B and ((B.X >= .5 or B.Y >= .5)) then
 		return o, B;
@@ -188,7 +188,7 @@ local function O(t)
 	if S and ((e >= .5 or k >= .5)) then
 		return o, { X = e, Y = k };
 	end;
-	if not q.calibratedAt or tick() - q.calibratedAt > 1 then
+	if not noCal and (not q.calibratedAt or tick() - q.calibratedAt > 1) then
 		pcall(q.calibrate);
 		local t, B = pcall(memory_read, "float", x + q.absSize);
 		local G, Q = pcall(memory_read, "float", (x + q.absSize) + 4);
@@ -332,69 +332,73 @@ function g.readMouse()
 	end;
 	return B, G;
 end;
+-- The game's buttons are found by walking PlayerGui, which is slow on an external executor, so the walk runs
+-- a few nodes per frame in the background and clicks only ever look at the last finished list.
 function cg.scan(t)
-	if cg.at and t - cg.at < 300 then
-		return cg.list;
+	if not cg.job and (not cg.at or t - cg.at >= 2000) then
+		local pg = S(r(), "PlayerGui");
+		local okc, guis = pcall(function()
+				return pg:GetChildren();
+			end);
+		local stack = {};
+		for _, gui in ipairs(okc and guis or {}) do
+			local okn, gname = pcall(function()
+					return gui.Name;
+				end);
+			local oke, en = pcall(function()
+					return gui.Enabled;
+				end);
+			if okn and gname ~= "QuickTimeEvents" and not (oke and en == false) then
+				stack[#stack + 1] = { gui, tostring(gname) };
+			end;
+		end;
+		cg.job = { stack = stack, list = {}, budget = 2500 };
 	end;
-	cg.at = t;
-	local list, budget, qteOrder = {}, 2500, nil;
-	local pg = S(r(), "PlayerGui");
-	local okc, guis = pcall(function()
-			return pg:GetChildren();
-		end);
-	for _, gui in ipairs(okc and guis or {}) do
-		local okn, gname = pcall(function()
-				return gui.Name;
+	return cg.list;
+end;
+function cg.step()
+	local j = cg.job;
+	if not j then
+		return;
+	end;
+	local n = 0;
+	while n < 15 and #j.stack > 0 and j.budget > 0 do
+		n, j.budget = n + 1, j.budget - 1;
+		local node = table.remove(j.stack);
+		local okk, kids = pcall(function()
+				return node[1]:GetChildren();
 			end);
-		local oke, en = pcall(function()
-				return gui.Enabled;
-			end);
-		local oko, order = pcall(function()
-				return gui.DisplayOrder;
-			end);
-		order = oko and type(order) == "number" and order or nil;
-		if okn and gname == "QuickTimeEvents" then
-			qteOrder = order;
-		elseif okn and not (oke and en == false) then
-			local stack = { { gui, tostring(gname) } };
-			while #stack > 0 and budget > 0 do
-				local node = table.remove(stack);
-				budget = budget - 1;
-				local okk, kids = pcall(function()
-						return node[1]:GetChildren();
+		for _, ch in ipairs(okk and kids or {}) do
+			local okv, vis = pcall(function()
+					return ch.Visible;
+				end);
+			if not (okv and vis == false) then
+				local okcl, cls = pcall(function()
+						return ch.ClassName;
 					end);
-				for _, ch in ipairs(okk and kids or {}) do
-					local okv, vis = pcall(function()
-							return ch.Visible;
-						end);
-					if not (okv and vis == false) then
-						local okcl, cls = pcall(function()
-								return ch.ClassName;
-							end);
-						local okn2, nm = pcall(function()
-								return ch.Name;
-							end);
-						local path = node[2] .. "." .. tostring(okn2 and nm or "?");
-						if okcl and (cls == "TextButton" or cls == "ImageButton") then
-							local bx, by, bw, bh = V(ch);
-							if bx and bw > 2 and bh > 2 then
-								list[#list + 1] = { x = bx, y = by, w = bw, h = bh, path = path, order = order };
-							end;
-						end;
-						stack[#stack + 1] = { ch, path };
+				local okn2, nm = pcall(function()
+						return ch.Name;
+					end);
+				local path = node[2] .. "." .. tostring(okn2 and nm or "?");
+				if okcl and (cls == "TextButton" or cls == "ImageButton") then
+					local ok, pos, size = pcall(O, ch, true);
+					if ok and pos and size and size.X > 2 and size.Y > 2 then
+						j.list[#j.list + 1] = { x = pos.X, y = pos.Y, w = size.X, h = size.Y, path = path };
 					end;
 				end;
+				j.stack[#j.stack + 1] = { ch, path };
 			end;
 		end;
 	end;
-	cg.list, cg.qteOrder = list, qteOrder;
-	return list;
+	if #j.stack == 0 or j.budget <= 0 then
+		cg.list, cg.at, cg.job = j.list, k(), nil;
+	end;
 end;
 function cg.blocker(px, py)
 	if not (px and py) then
 		return nil;
 	end;
-	for _, b in ipairs(cg.scan(k())) do
+	for _, b in ipairs(cg.list) do
 		if px >= b.x and px <= b.x + b.w and py >= b.y and py <= b.y + b.h then
 			return b.path;
 		end;
@@ -701,7 +705,11 @@ function c.step(t, o)	if K.phase == "IDLE" then
 			K.status = "moving the cursor to cast";
 			return;
 		end;
-		g.press(true);
+		if not g.press(true) then
+			K.status = "a game button is in the way of casting, moving the cursor";
+			c.aimAt = t;
+			return;
+		end;
 		K.casts = K.casts + 1;
 		K.castPressAt = t;
 		K.castFill, K.castFillAt, K.castRate = 0, t, 0;
@@ -3805,6 +3813,10 @@ do
 			return;
 		end;
 		t = o;
+		if S() then
+			cg.scan(k());
+			cg.step();
+		end;
 		if G.logDirty and o - (G.logFlushAt or 0) >= 1 then
 			G.logFlushAt = o;
 			G.flushLog();

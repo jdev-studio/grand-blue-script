@@ -8,6 +8,11 @@ Everything up to 1.1.5 was renumbered on 2026-10-02: `1.0.x` became `0.1.x` and 
 
 Versions up to 0.1.4b were renumbered to this scheme. Their commit messages use an even older numbering, shown in brackets below.
 
+## 0.2.6 - 2026-10-02
+
+- Fixed the lag when fishing starts. Before every cast (and every mining or fight click) the script checks for game buttons under the cursor, and that check walked the whole PlayerGui in one go, up to 2500 objects with three reads each. On an external executor every read is slow, so each check froze the game, and since 0.2.3 a refused click was retried every 50 ms, so it froze over and over and never cast. The walk now runs a few objects per frame in the background while a feature is on (a full pass takes about a second and a half, then repeats every 2 seconds), and a click only looks at the last finished list, so checking costs nothing.
+- When a game button is in the way of a cast, the script now moves the cursor to a clear spot and casts there, instead of counting it as a cast and charging an empty bar.
+
 ## 0.2.5 - 2026-10-02
 
 - Fixed the lag and Auto Fish not casting since 0.2.3. Before each cast the script moved the cursor to the middle of the screen and waited until the game reported it there, but Roblox reports the mouse without the top bar (and the window border if it isn't fullscreen), so it never matched. It kept moving the cursor every frame instead of casting, which also pinned your mouse to the middle. It now moves the cursor once per cast, waits 80 ms and casts.
