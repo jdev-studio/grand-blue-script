@@ -8,6 +8,10 @@ Everything up to 1.1.5 was renumbered on 2026-10-02: `1.0.x` became `0.1.x` and 
 
 Versions up to 0.1.4b were renumbered to this scheme. Their commit messages use an even older numbering, shown in brackets below.
 
+## 0.2.7 - 2026-10-03
+
+- Fixed the rod not coming back after a Fishfolk fight, which left you punching the air for hours. The switch back to the rod ran in a background thread, and on an external executor that thread can stall after its first wait, so the rod key was pressed and never let go (or never pressed) and no warning showed. Now, before every cast, the script checks you're holding the rod. If not, it presses the rod's slot (and lets go 50 ms later) every 1.5 s until the rod is out, instead of casting with your fists.
+
 ## 0.2.6 - 2026-10-02
 
 - Fixed the lag when fishing starts. Before every cast (and every mining or fight click) the script checks for game buttons under the cursor, and that check walked the whole PlayerGui in one go, up to 2500 objects with three reads each. On an external executor every read is slow, so each check froze the game, and since 0.2.3 a refused click was retried every 50 ms, so it froze over and over and never cast. The walk now runs a few objects per frame in the background while a feature is on (a full pass takes about a second and a half, then repeats every 2 seconds), and a click only looks at the last finished list, so checking costs nothing.

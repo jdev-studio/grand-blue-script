@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "0.2.6";
-G.UPDATED = "2026-10-02";
-G.NOTE = "No more lag when fishing starts";
+G.VERSION = "0.2.7";
+G.UPDATED = "2026-10-03";
+G.NOTE = "Rod comes back out after fights";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -1402,6 +1402,8 @@ local function D()
 		T.step(t);
 	elseif o == "Reel Fish" and not B then
 		a.step(t);
+	elseif K.phase == "IDLE" and (o == "" or B) and fm.needRod(t) then
+		-- no rod out after a fight, needRod is pressing its slot instead of casting with fists
 	elseif K.phase == "IDLE" or K.phase == "CHARGE" then
 		c.step(t, B and "" or o);
 	elseif o == "" then
@@ -2229,30 +2231,34 @@ function fm.finish(t)
 	C();
 	K.recastAt = t + 1500;
 	K.status = "back to fishing";
-	task.spawn(function()
-		pcall(function()
-			local held = fm.heldName();
-			if held and string.find(string.lower(held), "rod", 1, true) then
-				return;
-			end;
-			local key = fm.rodKey or (fm.rodName and fm.findSlot(fm.rodName));
-			if not key then
-				pcall(notify, "Couldn't find your rod on the hotbar, equip it to keep fishing", 5);
-				return;
-			end;
-			tapKey(key);
-			task.wait(.4);
-			local now = fm.heldName();
-			if not (now and string.find(string.lower(now), "rod", 1, true)) then
-				tapKey(key);
-				task.wait(.4);
-				now = fm.heldName();
-			end;
-			if not (now and string.find(string.lower(now), "rod", 1, true)) then
-				pcall(notify, "Couldn't switch back to the rod, equip it to keep fishing", 5);
-			end;
-		end);
-	end);
+	-- the cast loop puts the rod back out (fm.needRod); a spawned swap here can stall in Matcha and leave you punching
+	fm.rodKey = fm.rodKey or (fm.rodName and fm.findSlot(fm.rodName));
+	if not fm.rodKey and not fm.holdingRod() then
+		pcall(notify, "Couldn't find your rod on the hotbar, equip it to keep fishing", 5);
+	end;
+end;
+function fm.holdingRod()
+	local held = fm.heldName();
+	return held ~= nil and string.find(string.lower(held), "rod", 1, true) ~= nil;
+end;
+-- called by the cast loop every frame before casting: press the rod slot, let go 50ms later, retry every 1.5s until the rod is out
+function fm.needRod(t)
+	if fm.rodDown then
+		if t - fm.rodTapAt >= 50 then
+			pcall(keyrelease, fm.rodKey);
+			fm.rodDown = false;
+		end;
+		return true;
+	end;
+	if not fm.rodKey or fm.holdingRod() then
+		return false;
+	end;
+	K.status = "rod not out, pressing its slot";
+	if t - (fm.rodTapAt or -1000000000.0) >= 1500 then
+		fm.rodTapAt, fm.rodDown = t, true;
+		pcall(keypress, fm.rodKey);
+	end;
+	return true;
 end;
 function fm.beginReturn(t)
 	m.releaseAll();
