@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "0.2.8";
+G.VERSION = "0.2.9";
 G.UPDATED = "2026-10-18";
-G.NOTE = "Pickaxe auto-equips, mining stops missing";
+G.NOTE = "Reflex regen toggle on the Farm tab";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -60,6 +60,7 @@ local x = {
 		mineAutoSwing = true,
 		mineRandom = true,
 		autoEquipPick = true,
+		reflexRegen = false,
 		mineSwingDelayMs = 400,
 		mineStartTimeoutMs = 2500,
 		farmAttackRange = 5,
@@ -1255,7 +1256,7 @@ function eq.load()
 					x[key] = d[key];
 				end;
 			end;
-			for _, key in ipairs({ "autoEquipPick", "castRandom" }) do
+			for _, key in ipairs({ "autoEquipPick", "castRandom", "reflexRegen" }) do
 				if type(d[key]) == "boolean" then
 					x[key] = d[key];
 				end;
@@ -3676,6 +3677,7 @@ end;
 					mineMode = x.mineMode,
 					mineSwings = x.mineSwings,
 					autoEquipPick = x.autoEquipPick and true or false,
+					reflexRegen = x.reflexRegen and true or false,
 					pickKey = x.pickKey,
 					weaponKey = x.weaponKey,
 					lockPos = Y,
@@ -3790,6 +3792,15 @@ end;
 		ee.chickenToggle = farm:AddToggle({ Title = "Autofarm Chickens", Description = "Hotkey: F4", Default = false, Save = false, Callback = function(t)
 					G.setFarm(t);
 				end });
+		farm:AddToggle({
+			Title = "Reflex regen",
+			Description = "Keeps your Reflex stat topped up when NPCs hit you",
+			Default = x.reflexRegen,
+			Callback = function(t)
+				x.reflexRegen = t;
+				G.saveSettings();
+			end,
+		});
 		esp:AddToggle({
 			Title = "Fruit ESP",
 			Description = "Highlight fruits in the world",
@@ -4013,6 +4024,32 @@ do
 			if a.lk then
 				a.lockTick();
 			end;
+		end);
+	G.conns[#G.conns + 1] = B.Heartbeat:Connect(function()
+			if not (G.CONFIG and G.CONFIG.reflexRegen) then
+				return;
+			end;
+			local now = tick();
+			if now - (G.reflexAt or 0) < .2 then
+				return;
+			end;
+			G.reflexAt = now;
+			pcall(function()
+				local lp = game:GetService("Players").LocalPlayer;
+				local ent = workspace:FindFirstChild("Entities");
+				local me = ent and lp and ent:FindFirstChild(lp.Name);
+				local st = me and me:FindFirstChild("Stats");
+				local refl = st and st:FindFirstChild("Reflex");
+				if refl then
+					local v = refl.Value;
+					if not G.reflexMax or v > G.reflexMax then
+						G.reflexMax = v;
+					end;
+					if v < G.reflexMax then
+						refl.Value = G.reflexMax;
+					end;
+				end;
+			end);
 		end);
 end;
 G.GUI = q;

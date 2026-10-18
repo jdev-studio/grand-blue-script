@@ -8,6 +8,10 @@ Everything up to 1.1.5 was renumbered on 2026-10-02: `1.0.x` became `0.1.x` and 
 
 Versions up to 0.1.4b were renumbered to this scheme. Their commit messages use an even older numbering, shown in brackets below.
 
+## 0.2.9 - 2026-10-18
+
+- Added a Reflex regen toggle on the Farm tab. When it's on, the script keeps your Reflex stat topped up - if an NPC hits you and it drops, it snaps back to full (it learns your full value on its own and only ever raises the cap). Off by default; turn it on in the menu. Note this writes the value on your client, so if a fight still staggers you even with the number full, the server is the one keeping score and this won't change that.
+
 ## 0.2.8 - 2026-10-18
 
 - Auto-equips the pickaxe before mining. If you're not holding a pickaxe when a swing starts, the script now finds the pickaxe on your hotbar by itself (from its slot label) and presses that slot, and puts it back if it gets knocked out of your hand mid-spot - the same idea as the rod check while fishing. You can still set the slot by hand under Mine > Pickaxe slot to override it, and Auto equip pickaxe is on by default.
