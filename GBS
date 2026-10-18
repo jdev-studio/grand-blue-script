@@ -12,9 +12,9 @@ do
 end;
 local G = { conns = {}, dead = false };
 _G.GrandBlueFishMine = G;
-G.VERSION = "0.2.7";
-G.UPDATED = "2026-10-03";
-G.NOTE = "Rod comes back out after fights";
+G.VERSION = "0.2.8";
+G.UPDATED = "2026-10-18";
+G.NOTE = "Pickaxe auto-equips, mining stops missing";
 G.logLines = {};
 function G.log(msg)
 	local okT, ts = pcall(os.date, "%H:%M:%S");
@@ -58,6 +58,8 @@ local x = {
 		stableMs = 20,
 		maxAimFixes = 3,
 		mineAutoSwing = true,
+		mineRandom = true,
+		autoEquipPick = true,
 		mineSwingDelayMs = 400,
 		mineStartTimeoutMs = 2500,
 		farmAttackRange = 5,
@@ -1457,6 +1459,45 @@ end;
 function w.setPhase(t, o)
 	w.phase, w.phaseAt = t, o;
 end;
+w.aimStreak, w.aimOff = 0, 0;
+-- mirror the cast: aim dead-center (perfect) most swings, a deliberate off-center (still in-zone) good hit every 5th-ish
+function w.pickAim()
+	if not x.mineRandom then
+		return 0;
+	end;
+	if (w.aimStreak or 0) >= 5 or math.random() < .12 then
+		w.aimStreak = 0;
+		return (math.random() < .5 and -1 or 1) * (math.random(45, 80) / 100);
+	end;
+	w.aimStreak = (w.aimStreak or 0) + 1;
+	return (math.random() - .5) * .2;
+end;
+-- fire when the predicted landing is INSIDE the critical zone (never a miss), closest to the chosen aim point
+function w.hit(G, e)
+	if #e == 0 then
+		return false;
+	end;
+	local d = X.delay(G);
+	local p, p2 = X.predict(G, d, e), X.predict(G, d + 1, e);
+	if not (p and p2) then
+		return false;
+	end;
+	local z, best = nil, math.huge;
+	for _, zz in ipairs(e) do
+		local c = (zz.lo + zz.hi) / 2;
+		local dd = math.abs(p - c);
+		if dd < best then
+			best, z = dd, zz;
+		end;
+	end;
+	if not z then
+		return false;
+	end;
+	local half = (z.hi - z.lo) / 2;
+	local aim = (z.lo + z.hi) / 2 + (w.aimOff or 0) * half * .9;
+	local inside = p >= z.lo and p <= z.hi;
+	return inside and math.abs(p - aim) <= math.abs(p2 - aim) + 1e-06;
+end;
 function w.step(t)
 	local o = w.phase == "COOLDOWN" or w.phase == "SWING";
 	local B = tostring(i("QTEEvent", o and .1 or nil) or "");
@@ -1491,6 +1532,7 @@ function w.step(t)
 		if w.phase ~= "QTE" then
 			w.setPhase("QTE", t);
 			X.reset(G);
+			w.aimOff = w.pickAim();
 		end;
 		local o = X.observe(G, Q, t, e);
 		local B = "";
@@ -1499,7 +1541,7 @@ function w.step(t)
 		end;
 		w.status = string.format("bar %d%%  zone%s  delay %d fr", math.floor(Q * 100), B ~= "" and B or " ?", X.delay(G));
 		if o and (#e > 0 and t - w.triggerAt > 250) then
-			local o = X.shouldSend(G, e);
+			local o = w.hit(G, e);
 			if not o and w.passedAllZones(G, e) then
 				o = true;
 				w.gaveUp = w.gaveUp + 1;
@@ -1539,6 +1581,9 @@ function w.step(t)
 		end;
 		if w.hold then
 			return;
+		end;
+		if x.autoEquipPick and not eq.matches("pick", equippedTool()) then
+			eq.ensure("pick", eq.pickKey());
 		end;
 		if not g.press(true) then
 			w.status = "a game button is under the cursor, moving it";
@@ -2111,6 +2156,27 @@ function fm.findSlot(name)
 		end;
 	end;
 	return nil;
+end;
+-- auto-find the pickaxe's hotbar slot from the UI (this game has no Tool instances); cache it, re-scan at most every 3s
+function eq.pickKey()
+	if x.pickKey then
+		return x.pickKey;
+	end;
+	if eq.pickAuto then
+		return eq.pickAuto;
+	end;
+	local now = tick();
+	if eq.pickScanAt and now - eq.pickScanAt < 3 then
+		return nil;
+	end;
+	eq.pickScanAt = now;
+	local held = equippedTool();
+	if eq.matches("pick", held) then
+		eq.pickAuto = fm.findSlot(held.Name);
+	end;
+	-- hotbar labels are capitalised ("Diamond Pickaxe [Lv. 7]"); findSlot is case-sensitive
+	eq.pickAuto = eq.pickAuto or fm.findSlot("Pickaxe");
+	return eq.pickAuto;
 end;
 function fm.markHome()
 	local root = l();
@@ -3451,8 +3517,8 @@ function mt.step(now)
 		mt.swingStart, mt.noBarStart, mt.mineAt, mt.checkAt, mt.broken = w.swings, w.noBar, now, now, false;
 		local _, ore, kind, hp = mt.spotOre(i, now);
 		mt.oreHere, mt.kind, mt.skipped = ore, kind or "ore", 0;
-		if x.autoEquipPick and x.pickKey then
-			eq.ensure("pick", x.pickKey);
+		if x.autoEquipPick then
+			eq.ensure("pick", eq.pickKey());
 		end;
 		mt.dbg(string.format("mining spot %d: %s%s, %d swings", i, tostring(mt.kind), hp and (" (" .. tostring(hp) .. ")") or "", x.mineSwings));
 	end;
@@ -3494,9 +3560,9 @@ function mt.step(now)
 			local tool = equippedTool();
 			if eq.matches("pick", tool) then
 				pcall(notify, "No mining bar at spot " .. i .. " even with the pickaxe out", 3);
-			elseif x.autoEquipPick and x.pickKey then
+			elseif x.autoEquipPick then
 				pcall(notify, "No mining bar at spot " .. i .. ": holding " .. (tool and tool.Name or "nothing") .. ", equipping the pickaxe", 3);
-				eq.ensure("pick", x.pickKey);
+				eq.ensure("pick", eq.pickKey());
 			else
 				pcall(notify, "No mining bar at spot " .. i .. ": you're holding " .. (tool and tool.Name or "nothing") .. ". Hold the pickaxe, or set Pickaxe slot and turn on Auto equip pickaxe in the Mine tab", 5);
 			end;
@@ -3527,8 +3593,8 @@ function G.setMining(t)
 	w.lastEvent = tostring(i("QTEEvent") or "");
 	w.setPhase("IDLE", k());
 	w.status = t and "starting" or "idle";
-	if t and (x.pickKey and x.autoEquipPick) then
-		eq.ensure("pick", x.pickKey);
+	if t and x.autoEquipPick then
+		eq.ensure("pick", eq.pickKey());
 		w.setPhase("COOLDOWN", k() + 800);
 	end;
 	if t then

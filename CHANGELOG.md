@@ -8,6 +8,11 @@ Everything up to 1.1.5 was renumbered on 2026-10-02: `1.0.x` became `0.1.x` and 
 
 Versions up to 0.1.4b were renumbered to this scheme. Their commit messages use an even older numbering, shown in brackets below.
 
+## 0.2.8 - 2026-10-18
+
+- Auto-equips the pickaxe before mining. If you're not holding a pickaxe when a swing starts, the script now finds the pickaxe on your hotbar by itself (from its slot label) and presses that slot, and puts it back if it gets knocked out of your hand mid-spot - the same idea as the rod check while fishing. You can still set the slot by hand under Mine > Pickaxe slot to override it, and Auto equip pickaxe is on by default.
+- Fixed the miner missing the bar. It used to aim for the dead center of the critical zone and let go even when the hit was going to land outside it, so it whiffed. Now it only releases when the swing is predicted to land inside the zone, so it lands close to every time. To keep it from looking like a perfect robot, it aims dead center on most swings and deliberately goes a little off center (still inside the zone, still a hit) about every fifth swing.
+
 ## 0.2.7 - 2026-10-03
 
 - Fixed the rod not coming back after a Fishfolk fight, which left you punching the air for hours. The switch back to the rod ran in a background thread, and on an external executor that thread can stall after its first wait, so the rod key was pressed and never let go (or never pressed) and no warning showed. Now, before every cast, the script checks you're holding the rod. If not, it presses the rod's slot (and lets go 50 ms later) every 1.5 s until the rod is out, instead of casting with your fists.
